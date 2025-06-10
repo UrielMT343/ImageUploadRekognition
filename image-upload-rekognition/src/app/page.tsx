@@ -30,12 +30,16 @@ export default function Home() {
       img.src = results.original_image_url;
       
       img.onload = () => {
+
+        const fixedWidth = 800; // Set a fixed width for the canvas
+        const aspectRatio = img.naturalHeight / img.naturalWidth;
+
         // Scale canvas to image dimensions
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
+        canvas.width = fixedWidth;
+        canvas.height = fixedWidth * aspectRatio;
         
         // Draw the original image on the canvas
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
         // Draw the bounding boxes
         ctx.strokeStyle = 'red';
