@@ -76,6 +76,17 @@ resource "aws_lambda_function" "rekognition_lambda" {
   handler = "lambda_function.lambda_handler"
   runtime = "python3.13"
 
+  memory_size = 1024 # Increase memory from 128MB to 1024MB (1GB). This will also increase CPU power.
+  timeout = 30 # Increase timeout to 30 seconds
+
+  environment {
+    variables = {
+      S3_BUCKET_NAME     = aws_s3_bucket.image_bucket.bucket
+      DYNAMODB_TABLE_NAME = aws_dynamodb_table.results_table.name
+      AWS_REGION         = "us-east-1"
+    }
+  }
+
   layers = [data.aws_lambda_layer_version.pillow_layer.arn]
 
   tags = {
@@ -94,9 +105,13 @@ resource "aws_iam_policy" "lambda_permissions" {
     Version = "2012-10-17",
     Statement = [
       {
-        Action   = "s3:GetObject",
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ],
         Effect   = "Allow",
-        Resource = "${aws_s3_bucket.image_bucket.arn}/*" 
+        Resource = "${aws_s3_bucket.image_bucket.arn}/*" # Grant get, put, and delete permissions
       },
       {
         Action   = "dynamodb:PutItem",

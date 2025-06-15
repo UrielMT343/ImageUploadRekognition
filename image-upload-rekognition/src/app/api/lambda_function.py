@@ -4,120 +4,104 @@ import os
 import urllib.parse
 import datetime
 from decimal import Decimal
+import io
 from PIL import Image
 
+# --- AWS Client Initialization ---
 rekognition_client = boto3.client('rekognition')
 dynamodb_resource = boto3.resource('dynamodb')
+s3_client = boto3.client('s3')
 
+# --- Environment Variables & Constants ---
 MIN_CONFIDENCE = int(os.environ.get('MIN_CONFIDENCE', '75'))
 MAX_LABELS = int(os.environ.get('MAX_LABELS', '10'))
+TABLE_NAME = os.environ.get('DYNAMODB_TABLE_NAME', 'ImageAnalysisResults')
+DYNAMODB_TABLE = dynamodb_resource.Table(TABLE_NAME)
+
+# --- Image Processing Constants ---
+THUMBNAIL_SIZE = (200, 200)
+ANALYSIS_WIDTH = 800
 
 def lambda_handler(event, context):
+    # 1. Get Event Data
     bucket_name = event['Records'][0]['s3']['bucket']['name']
-    object_key_encoded = event['Records'][0]['s3']['object']['key']
-    object_key = urllib.parse.unquote_plus(object_key_encoded)
+    original_key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'])
 
-    table_name = os.environ.get('DYNAMODB_TABLE_NAME', 'ImageAnalysisResults')
-    table = dynamodb_resource.Table(table_name)
+    # --- Define keys for all image versions ---
+    filename = os.path.basename(original_key)
+    thumbnail_key = f"thumbnails/{filename}"
+    processed_key = f"processed/{filename}" 
 
-    print(f"Processing image: s3://{bucket_name}/{object_key}")
-    print(f"Successfully imported Pillow! Version: {Image.__version__}")
-
-    detected_labels_info = []
+    print(f"Processing image: s3://{bucket_name}/{original_key}")
 
     try:
+        # 2. Download original image from S3
+        response = s3_client.get_object(Bucket=bucket_name, Key=original_key)
+        image_bytes = response['Body'].read()
+
+        # --- Generate and Upload Thumbnail ---
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            image.thumbnail(THUMBNAIL_SIZE)
+            thumbnail_buffer = io.BytesIO()
+            image.save(thumbnail_buffer, format="JPEG", quality=90)
+            thumbnail_buffer.seek(0)
+            s3_client.put_object(
+                Bucket=bucket_name, Key=thumbnail_key, Body=thumbnail_buffer, ContentType='image/jpeg'
+            )
+            print(f"Successfully created thumbnail: s3://{bucket_name}/{thumbnail_key}")
+
+        # --- Standardize image for analysis ---
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            original_width, original_height = image.size
+            aspect_ratio = original_height / original_width
+            analysis_height = int(ANALYSIS_WIDTH * aspect_ratio)
+            analysis_image = image.resize((ANALYSIS_WIDTH, analysis_height), Image.Resampling.LANCZOS)
+            analysis_buffer = io.BytesIO()
+            analysis_image.save(analysis_buffer, format="JPEG", quality=95)
+            analysis_buffer.seek(0)
+            s3_client.put_object(
+                Bucket=bucket_name, Key=processed_key, Body=analysis_buffer, ContentType='image/jpeg'
+            )
+            print(f"Created standardized image for analysis: s3://{bucket_name}/{processed_key}")
+
+        # 3. Call Rekognition on the standardized image
         response = rekognition_client.detect_labels(
-            Image={
-                'S3Object': {
-                    'Bucket': bucket_name,
-                    'Name': object_key
-                }
-            },
+            Image={'S3Object': {'Bucket': bucket_name, 'Name': processed_key}},
             MaxLabels=MAX_LABELS,
             MinConfidence=float(MIN_CONFIDENCE)
         )
 
+        # 4. Process Rekognition response
+        detected_labels_info = []
         labels_from_rekognition = response.get('Labels', [])
-
-        if not labels_from_rekognition:
-            print(f"No labels found for image: s3://{bucket_name}/{object_key}")
-            return {
-                'statusCode': 200,
-                'body': json.dumps({'message': 'No labels found', 'detected_objects': []})
-            }
-        else:
-            print(f"Labels found for image: s3://{bucket_name}/{object_key}")
+        if labels_from_rekognition:
             for label_data in labels_from_rekognition:
-                label_name = label_data.get('Name')
-                label_confidence = label_data.get('Confidence')
-
-                if not (label_name and label_confidence is not None):
-                    print(f"  Skipping a label due to missing name or confidence: {label_data}")
-                    continue
-
-                print(f"  Processing Label: {label_name}, Confidence: {label_confidence:.2f}%")
-
                 if 'Instances' in label_data and len(label_data['Instances']) > 0:
-                    print(f"    Found {len(label_data['Instances'])} instance(s) of {label_name}:")
                     for instance in label_data['Instances']:
-                        instance_confidence = instance.get('Confidence')
+                        if 'BoundingBox' in instance and instance.get('Confidence') is not None:
+                            detected_labels_info.append({
+                                'Label': label_data.get('Name'),
+                                'Confidence': Decimal(str(instance['Confidence'])),
+                                'BoundingBox': {k: Decimal(str(v)) for k, v in instance['BoundingBox'].items()}
+                            })
+        
+        # 5. Store all keys in DynamoDB
+        item_to_store = {
+            'imageId': original_key, 
+            's3_bucket': bucket_name,
+            's3_original_key': original_key,
+            's3_thumbnail_key': thumbnail_key,
+            's3_processed_key': processed_key,
+            'processing_timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+            'detected_objects': detected_labels_info
+        }
+        DYNAMODB_TABLE.put_item(Item=item_to_store)
+        print(f"Successfully stored results for: {original_key} in DynamoDB")
+        return {'statusCode': 200, 'body': json.dumps({'message': 'Image processed successfully!'})}
 
-                        if 'BoundingBox' in instance and instance['BoundingBox'] is not None:
-                            bbox = instance['BoundingBox']
-
-                            box_width = bbox.get('Width')
-                            box_height = bbox.get('Height')
-                            box_left = bbox.get('Left')
-                            box_top = bbox.get('Top')
-
-                            if all(v is not None for v in [box_width, box_height, box_left, box_top, instance_confidence]):
-                                print(f"      Instance Confidence: {instance_confidence:.2f}%")
-                                print(f"      BoundingBox: Left={box_left:.4f}, Top={box_top:.4f}, Width={box_width:.4f}, Height={box_height:.4f}")
-                                
-                                object_info = {
-                                    'Label': label_name,
-                                    'Confidence': Decimal(str(instance_confidence)),
-                                    'BoundingBox': {
-                                        'Width': Decimal(str(box_width)),
-                                        'Height': Decimal(str(box_height)),
-                                        'Left': Decimal(str(box_left)),
-                                        'Top': Decimal(str(box_top))
-                                    }
-                                }
-                                detected_labels_info.append(object_info)
-                            else:
-                                print(f"      Instance of {label_name} is missing BoundingBox coordinates or instance confidence.")
-                        else:
-                            print(f"      Instance of {label_name} does not have a BoundingBox.")
-            
-            timestamp = datetime.datetime.utcnow().isoformat() + 'Z'
-
-            item_to_store = {
-                'imageId': object_key,
-                's3_bucket': bucket_name,
-                'processing_timestamp': timestamp,
-                'original_image_url': f"https://{bucket_name}.s3.{os.environ['AWS_REGION']}.amazonaws.com/{object_key}",
-                'detected_objects': detected_labels_info # The list with Decimal objects
-            }
-
-            table.put_item(Item=item_to_store)
-
-            print(f"Successfully stored results for: {object_key} in DynamoDB")
-
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'image_processed': f"s3://{bucket_name}/{object_key}",
-                    'detected_objects': detected_labels_info,
-                    'message': 'Image processed by Rekognition successfully'
-                }, default = str)
-            }
     except Exception as e:
-        print(f"Error processing image: {object_key} from bucket {bucket_name} with Rekognition")
-        print(str(e))
+        print(f"Error processing image: {original_key}")
         import traceback
         traceback.print_exc()
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e), 'image': f"s3://{bucket_name}/{object_key}"})
-        }
+        # Note: We don't do cleanup here anymore.
+        return {'statusCode': 500, 'body': json.dumps({'error': str(e)})}
