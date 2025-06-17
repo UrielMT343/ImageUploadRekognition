@@ -1,19 +1,19 @@
-/* src/app/page.module.css */
 .main {
   min-height: 100vh;
   padding: 4rem 0;
-  flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  background-color: #111;
+  color: #f0f0f0;
+  font-family: 'Segoe UI', sans-serif;
 }
 
 .description {
   margin-bottom: 2rem;
-  line-height: 1.5;
-  font-size: 1.2rem;
   text-align: center;
+  line-height: 1.5;
 }
 
 .form {
@@ -22,41 +22,109 @@
   align-items: center;
   gap: 1rem;
   padding: 2rem;
-  border: 1px solid #eaeaea;
+  border: 1px solid #444;
   border-radius: 10px;
+  background-color: #1a1a1a;
 }
 
-.message {
-  margin-top: 2rem;
-  font-size: 1.2rem;
-  color: #0070f3;
-  font-family: monospace;
-  word-break: break-all;
+#file-input {
+  background-color: #222;
+  color: #ddd;
+  border: 1px solid #444;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.button {
+  padding: 12px 24px;
+  font-weight: bold;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #0070f3, #00bfff);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  font-size: 1.1rem;
+  box-shadow: 0 4px 12px rgba(0, 112, 243, 0.4);
+}
+
+.button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 112, 243, 0.6);
+  background: linear-gradient(135deg, #0059c1, #0099cc);
+}
+
+.button:disabled {
+  background: #444;
+  color: #ccc;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .progressContainer {
   width: 100%;
-  max-width: 500px;
-  margin-top: 1rem;
+  max-width: 400px;
   text-align: center;
+  margin-top: 1rem;
 }
 
 .progressBar {
   width: 100%;
   height: 10px;
-  /* You can add more styles to make it look nicer */
+  background-color: #333;
+  border-radius: 5px;
+  overflow: hidden;
 }
 
-.cleanupButton {
-    padding: 8px 16px;
-    background-color: #f44336;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    margin-bottom: 16px;
+.message {
+  margin-top: 2rem;
+  font-size: 1.1rem;
+  color: #00bfff;
+  word-break: break-word;
 }
 
-.cleanupButton:hover {
-    background-color: #d32f2f;
+.resultsContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.annotatedImage {
+  border: 1px solid #555;
+  max-width: 90vw;
+  max-height: 80vh;
+}
+
+.clearButton {
+  padding: 10px 16px;
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.clearButton:hover {
+  background-color: #d32f2f;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 112, 243, 0.7);
+  }
+  70% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 10px rgba(0, 112, 243, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 112, 243, 0);
+  }
+}
+
+.button:hover:not(:disabled) {
+  animation: pulse 1s ease-out infinite;
 }

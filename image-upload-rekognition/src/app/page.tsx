@@ -13,7 +13,7 @@ type DetectionResult = {
     s3_bucket: string;
     s3_processed_key: string;
     detected_objects: DetectedObject[];
-    processed_image_url: string; 
+    processed_image_url: string;
 };
 
 export default function Home() {
@@ -36,7 +36,7 @@ export default function Home() {
             const img = new Image();
             img.crossOrigin = "Anonymous";
             img.src = results.processed_image_url;
-            
+
             img.onload = () => {
                 const fixedWidth = 800;
                 const aspectRatio = img.naturalHeight / img.naturalWidth;
@@ -68,19 +68,19 @@ export default function Home() {
         if (!results) return;
 
         console.log("Clearing results and triggering cleanup...");
-        
+
         // Trigger the background cleanup of the S3 object
         fetch(`/api/results`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 processedImageKey: results.s3_processed_key,
                 bucket: results.s3_bucket,
             })
         })
-        .then(res => res.json())
-        .then(data => console.log("Cleanup response:", data))
-        .catch(err => console.error("Cleanup failed:", err));
+            .then(res => res.json())
+            .then(data => console.log("Cleanup response:", data))
+            .catch(err => console.error("Cleanup failed:", err));
 
         // Immediately reset the UI state
         setResults(null);
@@ -152,7 +152,7 @@ export default function Home() {
             }
         }, 120000);
     };
-    
+
     const handleError = (error: unknown) => {
         setMessage(`An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
         setUploading(false);
@@ -165,7 +165,7 @@ export default function Home() {
                 <h1>Image Label and Bounding Box Generator</h1>
                 <p>Using AWS Rekognition, S3, Lambda, and DynamoDB</p>
             </div>
-            
+
             {/* --- NEW: Conditionally render the form OR the results --- */}
             {!results ? (
                 <>
@@ -174,11 +174,15 @@ export default function Home() {
                             id="file-input" type="file" accept="image/png, image/jpeg"
                             onChange={handleFileChange} disabled={uploading || isPolling}
                         />
-                        <button type="submit" disabled={uploading || isPolling || !file}>
+                        <button
+                            type="submit"
+                            className={styles.button}
+                            disabled={uploading || isPolling || !file}
+                        >
                             {isPolling ? 'Processing...' : uploading ? 'Uploading...' : 'Analyze Image'}
                         </button>
                     </form>
-                    
+
                     {uploading && !isPolling && (
                         <div className={styles.progressContainer}>
                             <p>Uploading: {uploadProgress}%</p>
@@ -196,7 +200,7 @@ export default function Home() {
                     </button>
                 </div>
             )}
-            
+
             {message && <p className={styles.message}>{message}</p>}
         </main>
     );
