@@ -1,17 +1,16 @@
 version: 1
 frontend:
   phases:
-    preBuild:
-      commands:
-        - cd image-upload-rekognition
-        - npm install
+    prebuild:
+      - cd image-upload-rekognition
+      - npm install
     build:
       commands:
-        - npm run build
+        - "npm run build"
   artifacts:
-    baseDirectory: image-upload-rekognition/.next
+    baseDirectory: .next
     files:
-      - '**/*'
+      - "**/*"
   cache:
     paths:
-      - image-upload-rekognition/node_modules/**/*
+      - node_modules/**/*
