@@ -3,7 +3,8 @@
 
 import { useState, ChangeEvent, FormEvent, useRef, useEffect } from 'react';
 import styles from './page.module.css';
-import axios from 'axios';
+// --- 1. Import the specific event type from axios ---
+import axios, { AxiosProgressEvent } from 'axios';
 
 // Type definitions remain the same
 type BoundingBox = { Width: number; Height: number; Left: number; Top: number; };
@@ -25,8 +26,7 @@ export default function Home() {
     const [isPolling, setIsPolling] = useState(false);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-    // This useEffect hook now ONLY handles drawing the image.
-    // The problematic cleanup fetch call has been removed.
+    // This useEffect hook is correct.
     useEffect(() => {
         if (results && canvasRef.current) {
             const canvas = canvasRef.current;
@@ -63,13 +63,11 @@ export default function Home() {
         }
     }, [results]);
 
-    // --- NEW: A dedicated function to handle cleanup and state reset ---
     const handleClear = () => {
         if (!results) return;
 
         console.log("Clearing results and triggering cleanup...");
 
-        // Trigger the background cleanup of the S3 object
         fetch(`/api/results`, {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
@@ -82,14 +80,12 @@ export default function Home() {
             .then(data => console.log("Cleanup response:", data))
             .catch(err => console.error("Cleanup failed:", err));
 
-        // Immediately reset the UI state
         setResults(null);
         setFile(null);
         setMessage('');
         setUploadProgress(0);
     };
 
-    // ... (handleFileChange and handleSubmit are the same as the progress bar version) ...
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
         setResults(null);
         setMessage('');
@@ -114,12 +110,17 @@ export default function Home() {
             const formData = new FormData();
             Object.entries(fields).forEach(([k, v]) => formData.append(k, v as string));
             formData.append('file', file);
+
             await axios.post(url, formData, {
-                onUploadProgress: (progressEvent: any) => {
-                    const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                    setUploadProgress(percent);
+                // --- 2. Use the correct type here instead of 'any' ---
+                onUploadProgress: (progressEvent: AxiosProgressEvent) => {
+                    if (progressEvent.total) {
+                        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        setUploadProgress(percent);
+                    }
                 }
             });
+            
             setMessage('Upload successful. Processing image...');
             setIsPolling(true);
             pollForResults(key);
@@ -166,7 +167,6 @@ export default function Home() {
                 <p>Using AWS Rekognition, S3, Lambda, and DynamoDB</p>
             </div>
 
-            {/* --- NEW: Conditionally render the form OR the results --- */}
             {!results ? (
                 <>
                     <form onSubmit={handleSubmit} className={styles.form}>
@@ -194,7 +194,6 @@ export default function Home() {
                 <div className={styles.resultsContainer}>
                     <h2>Analysis Results</h2>
                     <canvas ref={canvasRef} className={styles.annotatedImage} />
-                    {/* --- NEW: Add the clear button --- */}
                     <button onClick={handleClear} className={styles.clearButton}>
                         Analyze Another Image
                     </button>
