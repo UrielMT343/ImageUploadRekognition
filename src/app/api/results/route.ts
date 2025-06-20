@@ -5,8 +5,20 @@ import { S3Client, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // Initialize AWS clients
-const ddbDocClient = DynamoDBDocumentClient.from(new DynamoDBClient({ region: process.env.APP_AWS_REGION }));
-const s3Client = new S3Client({ region: process.env.APP_AWS_REGION });
+const credentials = {
+  accessKeyId: process.env.APP_AWS_ACCESS_KEY_ID!,
+  secretAccessKey: process.env.APP_AWS_SECRET_ACCESS_KEY!,
+};
+
+const ddbDocClient = DynamoDBDocumentClient.from(new DynamoDBClient({
+  region: process.env.APP_AWS_REGION,
+  credentials,
+}));
+
+const s3Client = new S3Client({
+  region: process.env.APP_AWS_REGION,
+  credentials,
+});
 
 // --- GET Function: Fetches results and creates a secure URL ---
 export async function GET(request: Request) {
