@@ -7,6 +7,13 @@ import { NextResponse } from "next/server";
 export async function POST(request: Request) {
   const { filename, contentType } = await request.json();
 
+  console.log("--- STARTING DIAGNOSTIC LOGS ---");
+  console.log("Value of TEST_VARIABLE:", process.env.TEST_VARIABLE);
+  console.log("Value of S3_BUCKET_NAME:", process.env.S3_BUCKET_NAME);
+  console.log("--- ENDING DIAGNOSTIC LOGS ---");
+
+  console.log("API route '/api/s3/generate-upload-url' was hit.");
+
   try {
     const client = new S3Client({
       region: process.env.APP_AWS_REGION,
@@ -17,8 +24,6 @@ export async function POST(request: Request) {
     });
 
     const key = `uploads/${uuidv4()}-${filename}`;
-
-    console.log("ATTEMPTING TO CREATE PRESIGNED POST FOR BUCKET:", process.env.S3_BUCKET_NAME);
 
     const { url, fields } = await createPresignedPost(client, {
       Bucket: process.env.S3_BUCKET_NAME!,
