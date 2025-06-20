@@ -18,6 +18,8 @@ export async function POST(request: Request) {
 
     const key = `uploads/${uuidv4()}-${filename}`;
 
+    console.log("ATTEMPTING TO CREATE PRESIGNED POST FOR BUCKET:", process.env.S3_BUCKET_NAME);
+
     const { url, fields } = await createPresignedPost(client, {
       Bucket: process.env.S3_BUCKET_NAME!,
       Key: key,
