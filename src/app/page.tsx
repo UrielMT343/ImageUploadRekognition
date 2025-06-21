@@ -24,6 +24,7 @@ export default function Home() {
     const [message, setMessage] = useState('');
     const [results, setResults] = useState<DetectionResult | null>(null);
     const [isPolling, setIsPolling] = useState(false);
+    const [validationError, setValidationError] = useState<string | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
     // This useEffect hook is correct.
@@ -87,15 +88,35 @@ export default function Home() {
     };
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-        setResults(null);
         setMessage('');
         setUploadProgress(0);
-        if (e.target.files) setFile(e.target.files[0]);
+
+        const selectedFile = e.target.files?.[0] ? e.target.files[0] : null;
+
+        if (!selectedFile) {
+            setFile(null);
+            setValidationError('No file selected.');
+            return;
+        }
+
+        const MAX_SIZE_MB = 10;
+        const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg'];
+
+        if (!ALLOWED_TYPES.includes(selectedFile.type)) {
+            setValidationError('Invalid file type. Please upload a JPG or PNG.');
+        } else if (selectedFile.size > MAX_SIZE_BYTES) {
+            setValidationError(`File size exceeds ${MAX_SIZE_MB} MB limit.`);
+        } else {
+            setValidationError(null);
+        }
+
+        setFile(selectedFile);
     };
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!file) return;
+        if (!file || validationError) return;
         setUploading(true);
         setUploadProgress(0);
         setMessage('Uploading image...');
@@ -120,7 +141,7 @@ export default function Home() {
                     }
                 }
             });
-            
+
             setMessage('Upload successful. Processing image...');
             setIsPolling(true);
             pollForResults(key);
@@ -172,16 +193,25 @@ export default function Home() {
                     <form onSubmit={handleSubmit} className={styles.form}>
                         <input
                             id="file-input" type="file" accept="image/png, image/jpeg"
-                            onChange={handleFileChange} disabled={uploading || isPolling}
+                            onChange={handleFileChange}
+                            // The input is only disabled while an upload/process is active.
+                            // This allows the user to select a new file to fix a validation error.
+                            disabled={uploading || isPolling}
                         />
                         <button
                             type="submit"
                             className={styles.button}
-                            disabled={uploading || isPolling || !file}
+                            disabled={!file || !!validationError || uploading || isPolling}
                         >
                             {isPolling ? 'Processing...' : uploading ? 'Uploading...' : 'Analyze Image'}
                         </button>
                     </form>
+
+                    {validationError && (
+                        <p className={styles.errorMessage}>
+                            {validationError}
+                        </p>
+                    )}
 
                     {uploading && !isPolling && (
                         <div className={styles.progressContainer}>

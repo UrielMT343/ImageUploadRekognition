@@ -110,6 +110,15 @@
   background-color: #d32f2f;
 }
 
+.errorMessage {
+  color: #d32f2f; /* A clear, strong red color */
+  font-weight: 500; /* Makes the text slightly bolder than normal */
+  margin-top: 12px; /* Adds some space above the message */
+  text-align: center;
+  font-size: 0.9rem; /* Slightly smaller than default paragraph text */
+  transition: color 0.3s ease; /* Optional: adds a smooth transition effect */
+}
+
 @keyframes pulse {
   0% {
     transform: scale(1);
