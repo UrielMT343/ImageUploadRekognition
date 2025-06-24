@@ -1,7 +1,7 @@
 // src/app/page.tsx
 "use client";
 
-import { useSession } from "next-auth/react";
+// import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, ChangeEvent, FormEvent, useRef, useEffect } from 'react';
 import styles from './page.module.css';
@@ -26,13 +26,13 @@ export default function Home() {
     const [isPolling, setIsPolling] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const { status } = useSession();
+    // const { status } = useSession();
     const router = useRouter();
 
     useEffect(() => {
-        if (status === "unauthenticated") {
-            router.replace("/login");
-        }
+        // if (status === "unauthenticated") {
+        //     router.replace("/login");
+        // }
 
         if (results && canvasRef.current) {
             const canvas = canvasRef.current;
@@ -67,7 +67,7 @@ export default function Home() {
             };
             img.onerror = () => setMessage("Error loading processed image from S3.");
         }
-    }, [results, router, status]);
+    }, [results, router]);
 
     const handleClear = () => {
         if (!results) return;

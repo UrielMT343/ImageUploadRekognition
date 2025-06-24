@@ -1,0 +1,13 @@
+/* src/app/login/page.module.css */
+
+.loginContainer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.loginMessage {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+}
