@@ -4,35 +4,47 @@
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import styles from './page.module.css';
+import styles from './page.module.css'; // Optional: if you have styles for this page
 
 export default function LoginPage() {
   const { status } = useSession();
   const router = useRouter();
-  const [message, setMessage] = useState<string | null>(null);
+  const [messageParagraph, setMessageParagraph] = useState("");
+  const [messageHeader, setMessageHeader] = useState("");
 
   useEffect(() => {
-    if (status === "loading") {
-      return;
-    }
-
     if (status === "authenticated") {
       router.replace("/");
-      setMessage("You are already logged in.")
+      setMessageHeader("You are already signed in.");
+      setMessageParagraph("Redirecting to the home page...");
     }
-
-    if (status === "unauthenticated") {
-      signIn("cognito");
-      setMessage("Redirecting to sign in...")
+    else if (status === "unauthenticated") {
+      setMessageHeader("You have been signed out.");
+      setMessageParagraph("Please sign in to continue.");
     }
   }, [status, router]);
 
+  if (status === "loading") {
+    return (
+      <div className={styles.loadingContainer}>
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.loginContainer}>
-      <div>
-        <h1 className={styles.loginMessage}>
-          {message || "Redirecting to sign in..."}
-        </h1>
+      <div className={styles.innerContent}>
+        <h1 className={styles.loginMessage}>{messageHeader}</h1>
+        <p className={styles.paragraph}>{messageParagraph}</p>
+        {status === "unauthenticated" && (
+          <button
+            onClick={() => signIn("cognito")}
+            className={styles.loginButton}
+          >
+            Sign In
+          </button>
+        )}
       </div>
     </div>
   );
