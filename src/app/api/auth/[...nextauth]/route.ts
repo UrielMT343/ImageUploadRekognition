@@ -1,13 +1,6 @@
 import NextAuth from "next-auth";
 import CognitoProvider from "next-auth/providers/cognito";
 
-type profile = {
-  'cognito:username': string;
-  email: string;
-  email_verified: boolean;
-  sub: string;
-}
-
 const handler = NextAuth({
   providers: [
     CognitoProvider({
