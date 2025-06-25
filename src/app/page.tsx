@@ -195,6 +195,7 @@ export default function Home() {
             {!results ? (
                 <>
                     <form onSubmit={handleSubmit} className={styles.form}>
+                        <label htmlFor="file-input" className={styles.label}>Select an image:</label>
                         <input
                             id="file-input" type="file" accept="image/png, image/jpeg"
                             onChange={handleFileChange}
