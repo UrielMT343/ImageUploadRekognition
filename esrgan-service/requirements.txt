@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+torch==1.12.1
+torchvision==0.13.1
+numpy==1.23.5
+Pillow
+python-multipart
+opencv-python
+git+https://github.com/xinntao/Real-ESRGAN.git
