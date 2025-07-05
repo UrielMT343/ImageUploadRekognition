@@ -1,6 +1,4 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Response
-from fastapi.responses import StreamingResponse
-import io
 import numpy as np
 import os
 from realesrgan import RealESRGANer
@@ -11,7 +9,14 @@ app = FastAPI()
 
 model_path = os.path.join("models", "realesr-general-x4v3.pth")
 
-model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
+model = SRVGGNetCompact(
+    num_in_ch=3,
+    num_out_ch=3,
+    num_feat=64,
+    num_conv=32,
+    upscale=4,
+    act_type='prelu'
+)
 
 upsampler = RealESRGANer(
     scale=4,
