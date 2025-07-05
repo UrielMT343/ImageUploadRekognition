@@ -28,7 +28,7 @@ jobs:
 
       - name: Build and Push ESRGAN Image
         run: |
-          docker build -t ${{ secrets.ECR_REPO_ESRGAN }} ./path/to/esrgan
+          docker build -t ${{ secrets.ECR_REPO_ESRGAN }} ./esrgan-service
           docker push ${{ secrets.ECR_REPO_ESRGAN }}
 
   build-and-push-go:
@@ -51,5 +51,5 @@ jobs:
 
       - name: Build and Push Go Image
         run: |
-          docker build -t ${{ secrets.ECR_REPO_GO }} ./path/to/go-container
+          docker build -t ${{ secrets.ECR_REPO_GO }} ./go-backend
           docker push ${{ secrets.ECR_REPO_GO }}
