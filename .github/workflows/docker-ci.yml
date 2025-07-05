@@ -15,7 +15,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Remove Docker Hub login if not needed
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -32,11 +31,11 @@ jobs:
       - name: Debug AWS Identity
         run: |
           aws sts get-caller-identity
-
-      # Use the correct login method (private or public ECR)
-      - name: Login to Amazon ECR
-        run: |
           aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPO_GO }}
+
+      - name: Login to Amazon ECR Public
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and Push Go Image
         run: |
