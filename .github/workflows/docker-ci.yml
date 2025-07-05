@@ -8,35 +8,6 @@ env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
 
 jobs:
-  build-and-push-esrgan:
-    name: Build & Push ESRGAN Container
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and Push ESRGAN Image
-        run: |
-          docker build -t ${{ secrets.ECR_REPO_ESRGAN }} ./esrgan-service
-          docker push ${{ secrets.ECR_REPO_ESRGAN }}
-
   build-and-push-go:
     name: Build & Push Go Container
     runs-on: ubuntu-latest
@@ -56,6 +27,11 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Debug AWS Identity
+        run: |
+          aws sts get-caller-identity
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPO_GO }}
 
       - name: Login to Amazon ECR
         id: login-ecr
