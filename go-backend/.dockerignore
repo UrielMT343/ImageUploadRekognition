@@ -1,0 +1,10 @@
+*.exe
+*.test
+*.out
+*.log
+*.env
+*.DS_Store
+node_modules/
+.idea/
+.vscode/
+.git/

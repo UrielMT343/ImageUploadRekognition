@@ -1,0 +1,50 @@
+name: Backend PR Validation
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  lint-and-test-esrgan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./esrgan-service
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Dependencies
+        run: |
+          pip install --no-cache-dir -r requirements.txt
+          pip install flake8
+
+      - name: Run Linter
+        run: flake8 .
+
+  lint-and-test-go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./go-backend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run Go Linter
+        run: go fmt ./...
+
+      - name: Run Go Tests
+        run: go test ./...

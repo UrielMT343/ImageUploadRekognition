@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  go-backend:
+    build: ./go-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - esrgan-service
+    networks:
+      - app-network
+
+  esrgan-service:
+    build: ./esrgan-service
+    ports:
+      - "5000:5000"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
