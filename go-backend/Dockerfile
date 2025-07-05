@@ -1,17 +1,26 @@
-# Use official Go image
-FROM golang:1.24
+# Stage 1: Build
+FROM golang:1.24 AS builder
 
-# Set working directory inside container
 WORKDIR /app
 
-# Copy all project files
+COPY go.mod ./
+RUN go mod tidy
+
 COPY . .
 
-# Build the Go app
-RUN go build -o main .
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
-# Expose port
+# Stage 2: Minimal runtime
+FROM alpine:latest
+
+WORKDIR /app
+
+# Install minimal libs if needed
+RUN apk --no-cache add ca-certificates
+
+# Copy built binary from builder stage
+COPY --from=builder /app/main .
+
 EXPOSE 8080
 
-# Run the app
 CMD ["./main"]

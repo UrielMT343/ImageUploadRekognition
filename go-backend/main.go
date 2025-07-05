@@ -1,7 +1,5 @@
 package main
 
-// curl.exe -X POST -F image=@calabazito.jpg http://localhost:8080/enhance --output enhanced.jpg
-
 import (
 	"bytes"
 	"fmt"
@@ -10,6 +8,8 @@ import (
 	"mime/multipart"
 	"net/http"
 )
+
+var forwardToESRGANFunc = forwardToESRGAN
 
 func main() {
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +56,7 @@ func enhanceHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Forward to ESRGAN service inside Docker network
 	fmt.Println("Forwarding image to ESRGAN")
-	resp, err := forwardToESRGAN(imgBytes, "http://esrgan-service:5000/enhance/")
+	resp, err := forwardToESRGANFunc(imgBytes, "http://esrgan-service:5000/enhance/")
 	fmt.Println("Received response from ESRGAN:", resp.Status)
 	if err != nil {
 		http.Error(w, "Enhancement failed", http.StatusInternalServerError)
