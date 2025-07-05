@@ -28,6 +28,7 @@ upsampler = RealESRGANer(
     half=False
 )
 
+
 @app.post("/enhance/")
 async def enhance_image(file: UploadFile = File(...)):
     if not file:
