@@ -1,43 +1,35 @@
-name: Build and Push Docker Images
+name: Build and Push to Public ECR
 
 on:
   push:
     branches: [ "main" ]
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
+  AWS_REGION: us-east-1  # Public ECR auth only works in us-east-1
 
 jobs:
   build-and-push-go:
-    name: Build & Push Go Container
+    name: Build & Push to Public ECR
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}  # Must be us-east-1
 
       - name: Debug AWS Identity
-        run: |
-          aws sts get-caller-identity
-          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPO_GO }}
+        run: aws sts get-caller-identity
 
       - name: Login to Amazon ECR Public
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        run: |
+          aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
 
-      - name: Build and Push Go Image
+      - name: Build and Push Image
         run: |
           docker build -t ${{ secrets.ECR_REPO_GO }} ./go-backend
           docker push ${{ secrets.ECR_REPO_GO }}
