@@ -3,9 +3,9 @@ name: Build and Push to Public ECR
 on:
   push:
     branches: [ "main" ]
-    paths:
+    # paths:
       # - "esgarn-backend/**"
-      - "go-backend/**"
+      # - "go-backend/**"
 
 env:
   AWS_REGION: us-east-1  # Public ECR auth only works in us-east-1
