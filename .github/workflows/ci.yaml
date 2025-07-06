@@ -27,6 +27,7 @@ jobs:
               - 'next.config.ts'
               - 'postcss.config.mjs'
               - 'tailwind.config.js'
+              - '.github/workflows/ci.yml'
   build:
     runs-on: ubuntu-latest
     needs: changes

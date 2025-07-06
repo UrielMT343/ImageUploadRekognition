@@ -3,16 +3,17 @@ name: Build and Push to Public ECR
 on:
   push:
     branches: [ "main" ]
-    # paths:
-      # - "esgarn-backend/**"
-      # - "go-backend/**"
+    paths:
+      - "esgarn-backend/**"
+      - "go-backend/**"
+      - ".github/workflows/docker-ci.yml"
 
 env:
   AWS_REGION: us-east-1  # Public ECR auth only works in us-east-1
 
 jobs:
-  build-and-push-ESGARN:
-    name: Build & Push ESGARN Container
+  build-and-push-ESRGAN:
+    name: Build & Push ESRGAN Container
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
