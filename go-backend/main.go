@@ -58,7 +58,7 @@ func processImage(bucket, key string) error {
 	}
 
 	fmt.Println("Forwarding image to ESRGAN container")
-	resp, err := forwardToESRGANFunc(imgBytes, "http://esrgan-service:5000/enhance/")
+	resp, err := forwardToESRGANFunc(imgBytes, "http://localhost:5000/enhance/")
 	if err != nil {
 		return fmt.Errorf("ESRGAN call failed: %w", err)
 	}
