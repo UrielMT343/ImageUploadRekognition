@@ -30,7 +30,7 @@ upsampler = RealESRGANer(
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    return {"status": "Nice and healthy!"}
 
 @app.post("/enhance/")
 async def enhance_image(file: UploadFile = File(...)):

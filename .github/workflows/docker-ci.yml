@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - "esgarn-backend/**"
+      - "esrgan-backend/**"
       - "go-backend/**"
       - ".github/workflows/docker-ci.yml"
 
