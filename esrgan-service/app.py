@@ -1,41 +1,55 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Response
 import numpy as np
 import os
-from realesrgan import RealESRGANer
-from basicsr.archs.srvgg_arch import SRVGGNetCompact
 import cv2
 
+from realesrgan import RealESRGANer
+from basicsr.archs.srvgg_arch import SRVGGNetCompact
+
 app = FastAPI()
+
+upsampler = None  # Will be initialized during startup
+
+
+@app.on_event("startup")
+def load_model():
+    global upsampler
+    print("Loading ESRGAN model...")
+
+    model_path = os.path.join("models", "realesr-general-x4v3.pth")
+
+    model = SRVGGNetCompact(
+        num_in_ch=3,
+        num_out_ch=3,
+        num_feat=64,
+        num_conv=32,
+        upscale=4,
+        act_type='prelu'
+    )
+
+    upsampler = RealESRGANer(
+        scale=4,
+        model_path=model_path,
+        model=model,
+        tile=0,
+        tile_pad=10,
+        pre_pad=0,
+        half=False
+    )
+
+    print("ESRGAN model loaded successfully.")
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "Nice and healthy!"}
 
-model_path = os.path.join("models", "realesr-general-x4v3.pth")
-
-model = SRVGGNetCompact(
-    num_in_ch=3,
-    num_out_ch=3,
-    num_feat=64,
-    num_conv=32,
-    upscale=4,
-    act_type='prelu'
-)
-
-upsampler = RealESRGANer(
-    scale=4,
-    model_path='models/realesr-general-x4v3.pth',
-    model=model,
-    tile=0,
-    tile_pad=10,
-    pre_pad=0,
-    half=False
-)
 
 @app.post("/enhance/")
 async def enhance_image(file: UploadFile = File(...)):
     if not file:
         raise HTTPException(status_code=422, detail="No file uploaded")
+
     print(f"Received file: {file.filename}")
     contents = await file.read()
     img_np = np.frombuffer(contents, np.uint8)
