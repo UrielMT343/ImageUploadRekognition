@@ -7,6 +7,10 @@ import cv2
 
 app = FastAPI()
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 model_path = os.path.join("models", "realesr-general-x4v3.pth")
 
 model = SRVGGNetCompact(
@@ -27,10 +31,6 @@ upsampler = RealESRGANer(
     pre_pad=0,
     half=False
 )
-
-@app.get("/health")
-def health_check():
-    return {"status": "Nice and healthy!"}
 
 @app.post("/enhance/")
 async def enhance_image(file: UploadFile = File(...)):
