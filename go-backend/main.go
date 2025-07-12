@@ -7,67 +7,86 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"strings"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
 
 var forwardToESRGANFunc = forwardToESRGAN
+var svc s3iface.S3API
 
 func main() {
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
-	})
+	fmt.Println("Go container started for ESRGAN enhancement")
 
-	http.HandleFunc("/enhance", enhanceHandler)
+	sess := session.Must(session.NewSession())
+	svc = s3.New(sess)
 
-	fmt.Println("Go Backend running on :8080")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		log.Fatal(err)
+	bucket := os.Getenv("BUCKET")
+	inputKey := os.Getenv("INPUT_KEY")
+
+	if bucket == "" || inputKey == "" {
+		log.Fatal("Missing BUCKET or INPUT_KEY environment variables")
 	}
+
+	err := processImage(bucket, inputKey)
+	if err != nil {
+		log.Fatalf("Failed to enhance image: %v", err)
+	}
+
+	fmt.Println("Enhancement complete. Container exiting.")
 }
 
-func enhanceHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func processImage(bucket, key string) error {
+	fmt.Printf("Downloading image from s3://%s/%s\n", bucket, key)
 
-	// Parse incoming multipart form
-	err := r.ParseMultipartForm(10 << 20) // 10MB max memory
+	out, err := svc.GetObject(&s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
 	if err != nil {
-		http.Error(w, "Error parsing form", http.StatusBadRequest)
-		return
+		return fmt.Errorf("failed to get object: %w", err)
 	}
+	defer out.Body.Close()
 
-	file, header, err := r.FormFile("image")
+	imgBytes, err := io.ReadAll(out.Body)
 	if err != nil {
-		http.Error(w, "Missing or invalid image", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	fmt.Printf("Received image: %s (%d bytes)\n", header.Filename, header.Size)
-
-	imgBytes, err := io.ReadAll(file)
-	if err != nil {
-		http.Error(w, "Failed to read image", http.StatusInternalServerError)
-		return
+		return fmt.Errorf("failed to read image body: %w", err)
 	}
 
-	// Forward to ESRGAN service inside Docker network
-	fmt.Println("Forwarding image to ESRGAN")
+	fmt.Println("Forwarding image to ESRGAN container")
 	resp, err := forwardToESRGANFunc(imgBytes, "http://esrgan-service:5000/enhance/")
-	fmt.Println("Received response from ESRGAN:", resp.Status)
 	if err != nil {
-		http.Error(w, "Enhancement failed", http.StatusInternalServerError)
-		log.Println("Error forwarding to ESRGAN:", err)
-		return
+		return fmt.Errorf("ESRGAN call failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	w.Header().Set("Content-Type", "image/jpeg")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("ESRGAN returned bad status: %s", resp.Status)
+	}
+
+	enhancedImg, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read enhanced image: %w", err)
+	}
+
+	outputKey := strings.Replace(key, "uploads/", "enhanced/", 1)
+	fmt.Printf("Uploading enhanced image to s3://%s/%s\n", bucket, outputKey)
+
+	_, err = svc.PutObject(&s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(outputKey),
+		Body:        bytes.NewReader(enhancedImg),
+		ContentType: aws.String("image/jpeg"),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload enhanced image: %w", err)
+	}
+
+	return nil
 }
 
 func forwardToESRGAN(imgData []byte, url string) (*http.Response, error) {

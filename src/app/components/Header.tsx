@@ -1,4 +1,4 @@
-// Example in src/app/components/Header.tsx
+//src/app/components/Header.tsx
 
 "use client";
 

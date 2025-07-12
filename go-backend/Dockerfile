@@ -3,7 +3,7 @@ FROM golang:1.24 AS builder
 
 WORKDIR /app
 
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod tidy
 
 COPY . .
@@ -20,7 +20,5 @@ RUN apk --no-cache add ca-certificates
 
 # Copy built binary from builder stage
 COPY --from=builder /app/main .
-
-EXPOSE 8080
 
 CMD ["./main"]

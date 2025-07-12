@@ -2,75 +2,68 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
 
-// Mock ESRGAN service for tests
-func startMockESRGAN() *httptest.Server {
+type mockS3 struct {
+	s3iface.S3API
+	t              *testing.T
+	expectedUpload string
+}
+
+func (m *mockS3) GetObject(input *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
+	if *input.Key == "uploads/test-user/test.jpg" {
+		return &s3.GetObjectOutput{
+			Body: io.NopCloser(bytes.NewReader([]byte("mock-image-bytes"))),
+		}, nil
+	}
+	return nil, errors.New("unexpected key")
+}
+
+func (m *mockS3) PutObject(input *s3.PutObjectInput) (*s3.PutObjectOutput, error) {
+	m.expectedUpload = *input.Key
+	body, _ := io.ReadAll(input.Body)
+	if !bytes.Contains(body, []byte("mock-enhanced-image")) {
+		m.t.Errorf("Expected enhanced image content, got: %s", body)
+	}
+	return &s3.PutObjectOutput{}, nil
+}
+
+func startMockESRGAN(t *testing.T) *httptest.Server {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("mock-enhanced-image-data"))
+		w.Write([]byte("mock-enhanced-image"))
 	})
 	return httptest.NewServer(handler)
 }
 
-func TestEnhanceEndpoint(t *testing.T) {
-	// Start mock ESRGAN server
-	mockServer := startMockESRGAN()
+func TestProcessImage(t *testing.T) {
+	mockServer := startMockESRGAN(t)
 	defer mockServer.Close()
 
-	// Override the forwarding function to hit the mock server
-	originalForward := forwardToESRGANFunc
 	forwardToESRGANFunc = func(imgData []byte, url string) (*http.Response, error) {
-		var buf bytes.Buffer
-		mw := multipart.NewWriter(&buf)
-
-		part, _ := mw.CreateFormFile("file", "image.jpg")
-		part.Write(imgData)
-		mw.Close()
-
-		req, _ := http.NewRequest("POST", mockServer.URL, &buf)
-		req.Header.Set("Content-Type", mw.FormDataContentType())
-		client := &http.Client{}
-		return client.Do(req)
+		req, _ := http.NewRequest("POST", mockServer.URL, bytes.NewReader(imgData))
+		req.Header.Set("Content-Type", "image/jpeg")
+		return http.DefaultClient.Do(req)
 	}
-	defer func() { forwardToESRGANFunc = originalForward }()
 
-	// Setup server with the enhance handler
-	mux := http.NewServeMux()
-	mux.HandleFunc("/enhance", enhanceHandler)
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
+	mock := &mockS3{t: t}
 
-	// Prepare fake image data for testing
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("image", "test.jpg")
-	part.Write([]byte("fake-image-data"))
-	writer.Close()
+	svc = mock
 
-	// Send request to the /enhance endpoint
-	req, _ := http.NewRequest("POST", ts.URL+"/enhance", body)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	resp, err := http.DefaultClient.Do(req)
+	err := processImage("test-bucket", "uploads/test-user/test.jpg")
 	if err != nil {
-		t.Fatalf("Request failed: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Validate response status code
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected 200 OK, got %d", resp.StatusCode)
+		t.Fatalf("processImage failed: %v", err)
 	}
 
-	// Validate response body
-	respData, _ := io.ReadAll(resp.Body)
-	if !strings.Contains(string(respData), "mock-enhanced-image-data") {
-		t.Errorf("Unexpected response body: %s", respData)
+	if mock.expectedUpload != "enhanced/test-user/test.jpg" {
+		t.Errorf("Unexpected upload key: %s", mock.expectedUpload)
 	}
 }
