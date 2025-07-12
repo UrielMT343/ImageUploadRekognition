@@ -28,4 +28,4 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app .
 
 EXPOSE 5000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000", "--log-level", "debug"]

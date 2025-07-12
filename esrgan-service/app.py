@@ -42,6 +42,7 @@ def load_model():
 
 @app.get("/health")
 async def health_check():
+    print("Health check endpoint was called")
     return {"status": "Nice and healthy!"}
 
 
