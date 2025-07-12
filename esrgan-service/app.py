@@ -9,7 +9,7 @@ app = FastAPI()
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok"}
+    return {"status": "Nice and healthy!"}
 
 model_path = os.path.join("models", "realesr-general-x4v3.pth")
 
