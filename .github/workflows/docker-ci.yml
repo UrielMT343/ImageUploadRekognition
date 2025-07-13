@@ -23,7 +23,7 @@ jobs:
       - name: Check if ESRGAN or CI config changed
         id: check_esrgan
         run: |
-          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          CHANGED=$(git diff --name-only HEAD^ HEAD || echo "")
           if echo "$CHANGED" | grep -qE '^(esrgan-service/|.github/workflows/docker-ci.yml)'; then
             echo "run_esrgan=true" >> $GITHUB_OUTPUT
           else
@@ -63,7 +63,7 @@ jobs:
       - name: Check if Go or CI config changed
         id: check_go
         run: |
-          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          CHANGED=$(git diff --name-only HEAD^ HEAD || echo "")
           if echo "$CHANGED" | grep -qE '^(go-backend/|.github/workflows/docker-ci.yml)'; then
             echo "run_go=true" >> $GITHUB_OUTPUT
           else
