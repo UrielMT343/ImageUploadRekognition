@@ -15,15 +15,23 @@ jobs:
   build-and-push-ESRGAN:
     name: Build & Push ESRGAN Container
     runs-on: ubuntu-latest
-    if: |
-        contains(github.event.head_commit.modified, 'esrgan-service/') || 
-        contains(github.event.head_commit.added, 'esrgan-service/') ||
-        contains(github.event.head_commit.modified, '.github/workflows/docker-ci.yml')
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check if ESRGAN or CI config changed
+        id: check_esrgan
+        run: |
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          if echo "$CHANGED" | grep -qE '^(esrgan-service/|.github/workflows/docker-ci.yml)'; then
+            echo "run_esrgan=true" >> $GITHUB_OUTPUT
+          else
+            echo "run_esrgan=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Configure AWS credentials
+        if: steps.check_esrgan.outputs.run_esrgan == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -34,10 +42,12 @@ jobs:
         run: aws sts get-caller-identity
 
       - name: Login to Amazon ECR Public
+        if: steps.check_esrgan.outputs.run_esrgan == 'true'
         run: |
           aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
 
       - name: Build and Push Image
+        if: steps.check_esrgan.outputs.run_esrgan == 'true'
         run: |
           docker build -t ${{ secrets.ECR_REPO_ESRGAN }} ./esrgan-service
           docker push ${{ secrets.ECR_REPO_ESRGAN }}
@@ -45,15 +55,23 @@ jobs:
   build-and-push-go:
     name: Build & Push Go Container
     runs-on: ubuntu-latest
-    if: |
-        contains(github.event.head_commit.modified, 'go-backend/') || 
-        contains(github.event.head_commit.added, 'go-backend/') ||
-        contains(github.event.head_commit.modified, '.github/workflows/docker-ci.yml')
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check if Go or CI config changed
+        id: check_go
+        run: |
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+          if echo "$CHANGED" | grep -qE '^(go-backend/|.github/workflows/docker-ci.yml)'; then
+            echo "run_go=true" >> $GITHUB_OUTPUT
+          else
+            echo "run_go=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Configure AWS credentials
+        if: steps.check_go.outputs.run_go == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -64,10 +82,12 @@ jobs:
         run: aws sts get-caller-identity
 
       - name: Login to Amazon ECR Public
+        if: steps.check_go.outputs.run_go == 'true'
         run: |
           aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
 
       - name: Build and Push Image
+        if: steps.check_go.outputs.run_go == 'true'
         run: |
           docker build -t ${{ secrets.ECR_REPO_GO }} ./go-backend
           docker push ${{ secrets.ECR_REPO_GO }}
