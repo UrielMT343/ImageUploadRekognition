@@ -25,6 +25,13 @@ func main() {
 	sess := session.Must(session.NewSession())
 	svc = s3.New(sess)
 
+	resp, err := http.Get("http://localhost:5000/health")
+	if err != nil {
+		log.Printf("Health check failed: %v", err)
+	} else {
+		log.Printf("Health status: %s", resp.Status)
+	}
+
 	bucket := os.Getenv("BUCKET")
 	inputKey := os.Getenv("INPUT_KEY")
 
@@ -32,7 +39,7 @@ func main() {
 		log.Fatal("Missing BUCKET or INPUT_KEY environment variables")
 	}
 
-	err := processImage(bucket, inputKey)
+	err = processImage(bucket, inputKey)
 	if err != nil {
 		log.Fatalf("Failed to enhance image: %v", err)
 	}

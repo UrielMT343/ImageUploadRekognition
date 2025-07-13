@@ -42,6 +42,8 @@ def load_model():
 
 @app.get("/health")
 async def health_check():
+    if upsampler is None:
+        raise HTTPException(status_code=503, detail="Model not loaded")
     print("Health check endpoint was called")
     return {"status": "Nice and healthy!"}
 
