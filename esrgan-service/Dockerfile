@@ -27,5 +27,16 @@ COPY --from=builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python
 COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app .
 
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
 EXPOSE 5000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000", "--log-level", "debug"]
+CMD ["sh", "-c", \
+    "echo 'Starting model loading...' && \
+     uvicorn app:app --host 0.0.0.0 --port 5000 --log-level debug & \
+     while ! curl -s http://localhost:5000/health | grep -q 'Nice and healthy'; do \
+       sleep 2; \
+       echo 'Waiting for model to load...'; \
+     done; \
+     echo 'Service fully ready'; \
+     wait"]
