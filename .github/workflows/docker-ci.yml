@@ -15,7 +15,10 @@ jobs:
   build-and-push-ESRGAN:
     name: Build & Push ESRGAN Container
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.modified, 'esrgan-service/') || contains(github.event.head_commit.added, 'esrgan-service/')
+    if: |
+        contains(github.event.head_commit.modified, 'esrgan-service/') || 
+        contains(github.event.head_commit.added, 'esrgan-service/') ||
+        contains(github.event.head_commit.modified, '.github/workflows/docker-ci.yml')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,7 +45,10 @@ jobs:
   build-and-push-go:
     name: Build & Push Go Container
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.modified, 'go-backend/') || contains(github.event.head_commit.added, 'go-backend/')
+    if: |
+        contains(github.event.head_commit.modified, 'go-backend/') || 
+        contains(github.event.head_commit.added, 'go-backend/') ||
+        contains(github.event.head_commit.modified, '.github/workflows/docker-ci.yml')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
