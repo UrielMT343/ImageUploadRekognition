@@ -16,9 +16,6 @@ def load_model():
     global upsampler
     print("Starting model loading...", flush=True)
 
-    from fastapi.middleware.dispatcher import DispatcherMiddleware
-    app.router.lifespan_context = None
-
     model_path = os.path.join("models", "realesr-general-x4v3.pth")
 
     model = SRVGGNetCompact(
