@@ -1,14 +1,17 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Response
 import numpy as np
 import os
 import cv2
 
 from realesrgan import RealESRGANer
 from basicsr.archs.srvgg_arch import SRVGGNetCompact
+from fastapi import FastAPI, UploadFile, File, HTTPException, Response
+from threading import Lock
+
 
 app = FastAPI()
 
-upsampler = None  # Will be initialized during startup
+upsampler = None
+model_lock = Lock()
 
 
 @app.on_event("startup")
@@ -50,6 +53,10 @@ async def health_check():
 
 @app.post("/enhance/")
 async def enhance_image(file: UploadFile = File(...)):
+    if upsampler is None:
+        print("Model not loaded during enhancement request")
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable (model loading)")
+    
     if not file:
         raise HTTPException(status_code=422, detail="No file uploaded")
 
@@ -64,7 +71,9 @@ async def enhance_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Invalid image")
 
     try:
-        output, _ = upsampler.enhance(img)
+        with model_lock:
+            print("Enhancing image...")
+            output, _ = upsampler.enhance(img)
     except Exception as e:
         print(f"Enhancement failed: {e}")
         raise HTTPException(status_code=500, detail="Enhancement failed")

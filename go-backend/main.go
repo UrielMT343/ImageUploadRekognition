@@ -80,7 +80,7 @@ func processImage(bucket, key string) error {
 		return fmt.Errorf("failed to read enhanced image: %w", err)
 	}
 
-	outputKey := strings.Replace(key, "uploads/", "enhanced/", 1)
+	outputKey := strings.Replace(key, "analysis/", "enhanced/", 1)
 	fmt.Printf("Uploading enhanced image to s3://%s/%s\n", bucket, outputKey)
 
 	_, err = svc.PutObject(&s3.PutObjectInput{
