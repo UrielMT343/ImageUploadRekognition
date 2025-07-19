@@ -1,26 +1,26 @@
+// src/app/api/results/route.ts
 import { NextResponse } from 'next/server';
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
-import { S3Client, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { isS3NotFoundError } from "../../../../types/errorUtils";
 
-// Initialize AWS clients
 const credentials = {
-  accessKeyId: process.env.APP_AWS_ACCESS_KEY_ID!,
-  secretAccessKey: process.env.APP_AWS_SECRET_ACCESS_KEY!,
+    accessKeyId: process.env.APP_AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.APP_AWS_SECRET_ACCESS_KEY!,
 };
 
 const ddbDocClient = DynamoDBDocumentClient.from(new DynamoDBClient({
-  region: process.env.APP_AWS_REGION,
-  credentials,
+    region: process.env.APP_AWS_REGION,
+    credentials,
 }));
 
 const s3Client = new S3Client({
-  region: process.env.APP_AWS_REGION,
-  credentials,
+    region: process.env.APP_AWS_REGION,
+    credentials,
 });
 
-// --- GET Function: Fetches results and creates a secure URL ---
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const imageId = searchParams.get("id");
@@ -37,12 +37,28 @@ export async function GET(request: Request) {
     try {
         const { Item } = await ddbDocClient.send(command);
         if (!Item) {
+            console.log("[API] No item found for imageId:", imageId);
             return NextResponse.json({ error: 'Result not found' }, { status: 404 });
         }
 
         const processedImageKey = Item.s3_processed_key;
         if (!processedImageKey) {
             throw new Error("Processed image key not found in database item.");
+        }
+
+        const headCommand = new HeadObjectCommand({
+            Bucket: Item.s3_bucket,
+            Key: processedImageKey,
+        });
+
+        try {
+            await s3Client.send(headCommand);
+        } catch (err: unknown) {
+            console.log("[API] Failed headObject for key:", processedImageKey);
+            if (isS3NotFoundError(err)) {
+                return NextResponse.json({ error: 'Image not yet ready' }, { status: 404 });
+            }
+            throw err;
         }
 
         const s3Command = new GetObjectCommand({
@@ -62,7 +78,6 @@ export async function GET(request: Request) {
     }
 }
 
-// --- DELETE Function: Cleans up the processed image ---
 export async function DELETE(request: Request) {
     const { processedImageKey, bucket } = await request.json();
 

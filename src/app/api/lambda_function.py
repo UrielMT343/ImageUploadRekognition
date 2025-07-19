@@ -24,13 +24,27 @@ ANALYSIS_WIDTH = 800
 
 def lambda_handler(event, context):
     # 1. Get Event Data
-    bucket_name = event['Records'][0]['s3']['bucket']['name']
-    original_key = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'])
+    record = event['Records'][0]
+
+    if 'body' in record:
+        s3_event = json.loads(record['body'])
+    else:
+        s3_event = event
+
+    bucket_name = s3_event['Records'][0]['s3']['bucket']['name']
+    original_key = urllib.parse.unquote_plus(s3_event['Records'][0]['s3']['object']['key'])
+
+    parts = original_key.split("/")
+
+    if len(parts) < 3:
+        raise ValueError(f"Unexpected S3 key format: {original_key}")
+
+    username = parts[1]
+    filename = parts[2]
 
     # --- Define keys for all image versions ---
-    filename = os.path.basename(original_key)
-    thumbnail_key = f"thumbnails/{filename}"
-    processed_key = f"processed/{filename}" 
+    thumbnail_key = f"thumbnails/{username}/{filename}"
+    processed_key = f"processed/{username}/{filename}" 
 
     print(f"Processing image: s3://{bucket_name}/{original_key}")
 
@@ -88,6 +102,7 @@ def lambda_handler(event, context):
         # 5. Store all keys in DynamoDB
         item_to_store = {
             'imageId': original_key, 
+            'username': username,
             's3_bucket': bucket_name,
             's3_original_key': original_key,
             's3_thumbnail_key': thumbnail_key,
@@ -103,5 +118,4 @@ def lambda_handler(event, context):
         print(f"Error processing image: {original_key}")
         import traceback
         traceback.print_exc()
-        # Note: We don't do cleanup here anymore.
         return {'statusCode': 500, 'body': json.dumps({'error': str(e)})}

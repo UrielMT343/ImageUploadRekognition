@@ -24,6 +24,7 @@ export default function Home() {
     const [message, setMessage] = useState('');
     const [results, setResults] = useState<DetectionResult | null>(null);
     const [isPolling, setIsPolling] = useState(false);
+    const [isEnhanced, setIsEnhanced] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const { status } = useSession();
@@ -126,7 +127,8 @@ export default function Home() {
         setUploadProgress(0);
         setMessage('Uploading image...');
         try {
-            const presignedResponse = await fetch('/api/s3/generate-upload-url', {
+            const route = isEnhanced ? '/api/s3/generate-enhance-url' : '/api/s3/generate-upload-url';
+            const presignedResponse = await fetch(route, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ filename: file.name, contentType: file.type }),
@@ -146,7 +148,12 @@ export default function Home() {
                 }
             });
 
-            setMessage('Upload successful. Processing image...');
+            if (isEnhanced) {
+                setMessage('Upload successful. Processing image... this may take from 3 to 5 minutes ⏳');
+            } else {
+                setMessage('Upload successful. Processing image...');
+            }
+            
             setIsPolling(true);
             pollForResults(key);
         } catch (error) {
@@ -157,7 +164,12 @@ export default function Home() {
     };
 
     const pollForResults = (key: string) => {
-        const encodedKey = encodeURIComponent(key);
+        const adjustedKey = isEnhanced ? key.replace(/^analysis\//, 'enhanced/') : key;
+        const encodedKey = encodeURIComponent(adjustedKey);
+        console.log(`Starting polling for results with key: ${encodedKey}`);
+        const minutes = isEnhanced ? 7 : 2;
+        const timeoutDuration = isEnhanced ? minutes * 60 * 1000 : minutes * 60 * 1000;
+        const intervalDelay = isEnhanced ? 15000 : 3000;
         const intervalId = setInterval(async () => {
             try {
                 const resultResponse = await fetch(`/api/results?id=${encodedKey}`);
@@ -169,20 +181,24 @@ export default function Home() {
                     clearInterval(intervalId);
                 }
             } catch (error) { console.error('Polling error:', error); }
-        }, 3000);
+        }, intervalDelay);
         setTimeout(() => {
             if (isPolling) {
                 clearInterval(intervalId);
                 setIsPolling(false);
                 setMessage('Processing timed out.');
             }
-        }, 120000);
+        }, timeoutDuration);
     };
 
     const handleError = (error: unknown) => {
         setMessage(`An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
         setUploading(false);
         setIsPolling(false);
+    };
+
+    const handleEnhancedCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setIsEnhanced(e.target.checked);
     };
 
     return (
@@ -208,6 +224,8 @@ export default function Home() {
                         >
                             {isPolling ? 'Processing...' : uploading ? 'Uploading...' : 'Analyze Image'}
                         </button>
+                        <input type="checkbox" id="enhance" checked={isEnhanced} onChange={handleEnhancedCheckboxChange}/>
+                        <label htmlFor="enhance">Enhance image quality before analysis</label>
                     </form>
 
                     {validationError && (

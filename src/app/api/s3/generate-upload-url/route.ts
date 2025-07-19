@@ -11,6 +11,9 @@ export async function POST(request: Request) {
   const { filename, contentType } = await request.json();
   const session = await getServerSession(authOptions);
 
+  const MAX_SIZE_MB = 10;
+  const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+
   if (!session) {
     return NextResponse.json(
       { error: "Unauthorized" },
@@ -42,7 +45,7 @@ export async function POST(request: Request) {
       Bucket: process.env.S3_BUCKET_NAME!,
       Key: key,
       Conditions: [
-        ["content-length-range", 0, 10485760], // up to 10 MB
+        ["content-length-range", 0, MAX_SIZE_BYTES],
         ["eq", "$Content-Type", contentType],
       ],
       Fields: {
@@ -56,10 +59,13 @@ export async function POST(request: Request) {
     console.error("Error creating presigned URL:", error);
 
     if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500 });
     }
+
     return NextResponse.json(
-      { error: "An unknown error occurred" },
+      { error: "Internal Server Error" },
       { status: 500 }
     );
   }
