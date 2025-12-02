@@ -1,5 +1,3 @@
-/* src/app/components/Header.module.css */
-
 .header {
   display: flex;
   justify-content: space-between; /* Pushes items to opposite ends */

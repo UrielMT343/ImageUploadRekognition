@@ -1,11 +1,9 @@
-// src/app/api/s3/generate-upload-url/route.ts
-
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
-import { S3Client } from "@aws-sdk/client-s3";
 import { v4 as uuidv4 } from "uuid";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth"
+import { s3Client } from "@/lib/s3";
 
 export async function POST(request: Request) {
   const { filename, contentType } = await request.json();
@@ -31,13 +29,7 @@ export async function POST(request: Request) {
   console.log("API route '/api/s3/generate-upload-url' was hit. for user:", session.user?.username);
 
   try {
-    const client = new S3Client({
-      region: process.env.APP_AWS_REGION,
-      credentials: {
-        accessKeyId: process.env.APP_AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.APP_AWS_SECRET_ACCESS_KEY!,
-      },
-    });
+    const client = s3Client;
 
     const key = `uploads/${session.user.username}/${uuidv4()}-${filename}`;
 

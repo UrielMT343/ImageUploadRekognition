@@ -1,4 +1,3 @@
-// src/app/page.tsx
 "use client";
 
 import { useSession } from "next-auth/react";
@@ -6,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, ChangeEvent, FormEvent, useRef, useEffect } from 'react';
 import styles from './page.module.css';
 import axios, { AxiosProgressEvent } from 'axios';
+import RecentImagesCarousel, { RecentImage } from "./components/RecentImagesCarousel";
 
 type BoundingBox = { Width: number; Height: number; Left: number; Top: number; };
 type DetectedObject = { Label: string; Confidence: number; BoundingBox: BoundingBox; };
@@ -13,6 +13,7 @@ type DetectionResult = {
     imageId: string;
     s3_bucket: string;
     s3_processed_key: string;
+    s3_original_key: string;
     detected_objects: DetectedObject[];
     processed_image_url: string;
 };
@@ -26,6 +27,8 @@ export default function Home() {
     const [isPolling, setIsPolling] = useState(false);
     const [isEnhanced, setIsEnhanced] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
+    const [items, setItems] = useState<RecentImage[]>([]);
+    const [isThumbnail, setIsThumbnail] = useState(false);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const { status } = useSession();
     const router = useRouter();
@@ -34,6 +37,11 @@ export default function Home() {
         if (status === "unauthenticated") {
             router.replace("/login");
         }
+
+        fetch("/api/thumbnails?limit=20", { cache: "no-store" })
+            .then((r) => r.json())
+            .then((d) => setItems(d.items ?? []))
+            .catch(console.error);
 
         if (results && canvasRef.current) {
             const canvas = canvasRef.current;
@@ -73,24 +81,30 @@ export default function Home() {
     const handleClear = () => {
         if (!results) return;
 
-        console.log("Clearing results and triggering cleanup...");
+        if (!isThumbnail) {
+            try {
+                console.log("Clearing results and triggering cleanup...");
 
-        fetch(`/api/results`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                processedImageKey: results.s3_processed_key,
-                bucket: results.s3_bucket,
-            })
-        })
-            .then(res => res.json())
-            .then(data => console.log("Cleanup response:", data))
-            .catch(err => console.error("Cleanup failed:", err));
+                fetch(`/api/results`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        processedImageKey: results.s3_original_key,
+                        bucket: results.s3_bucket,
+                    })
+                })
+                    .then(res => res.json())
+                    .then(data => console.log("Cleanup response:", data))
+            } catch (error) {
+                console.error("Cleanup failed:", error);
+            }
+        }
 
         setResults(null);
         setFile(null);
         setMessage('');
         setUploadProgress(0);
+        setIsThumbnail(false);
     };
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -153,7 +167,7 @@ export default function Home() {
             } else {
                 setMessage('Upload successful. Processing image...');
             }
-            
+
             setIsPolling(true);
             pollForResults(key);
         } catch (error) {
@@ -224,7 +238,7 @@ export default function Home() {
                         >
                             {isPolling ? 'Processing...' : uploading ? 'Uploading...' : 'Analyze Image'}
                         </button>
-                        <input type="checkbox" id="enhance" checked={isEnhanced} onChange={handleEnhancedCheckboxChange}/>
+                        <input type="checkbox" id="enhance" checked={isEnhanced} onChange={handleEnhancedCheckboxChange} />
                         <label htmlFor="enhance">Enhance image quality before analysis</label>
                     </form>
 
@@ -240,6 +254,31 @@ export default function Home() {
                             <progress className={styles.progressBar} value={uploadProgress} max="100" />
                         </div>
                     )}
+                    <div className={styles.thumbnailContainer}>
+                        <h2>Recently processed images</h2>
+                        <RecentImagesCarousel
+                            items={items}
+                            onSelect={async (it) => {
+                                console.log(it.processedKey);
+                                setIsThumbnail(true);
+                                const res = await fetch("/api/processed", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ key: it.processedKey }),
+                                });
+                                if (!res.ok) { return; }
+                                const { processedUrl, labels } = await res.json();
+                                setResults({
+                                    imageId: "",
+                                    s3_bucket: "",
+                                    s3_processed_key: it.processedKey,
+                                    s3_original_key: "",
+                                    detected_objects: labels,
+                                    processed_image_url: processedUrl,
+                                });
+                            }}
+                        />
+                    </div>
                 </>
             ) : (
                 <div className={styles.resultsContainer}>

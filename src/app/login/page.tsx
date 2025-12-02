@@ -1,10 +1,9 @@
-// src/app/login/page.tsx
 "use client";
 
 import { useSession, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import styles from './page.module.css'; // Optional: if you have styles for this page
+import styles from './page.module.css';
 
 export default function LoginPage() {
   const { status } = useSession();

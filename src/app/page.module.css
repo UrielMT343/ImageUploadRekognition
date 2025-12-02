@@ -160,3 +160,7 @@
 .button:hover:not(:disabled) {
   animation: pulse 1s ease-out infinite;
 }
+
+.thumbnailContainer {
+  padding: 20px;
+}

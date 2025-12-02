@@ -1,25 +1,10 @@
-// src/app/api/results/route.ts
 import { NextResponse } from 'next/server';
-import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
-import { S3Client, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { s3Client } from '@/lib/s3';
+import { ddbDocClient } from '@/lib/dynamo';
+import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { isS3NotFoundError } from "../../../../types/errorUtils";
-
-const credentials = {
-    accessKeyId: process.env.APP_AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.APP_AWS_SECRET_ACCESS_KEY!,
-};
-
-const ddbDocClient = DynamoDBDocumentClient.from(new DynamoDBClient({
-    region: process.env.APP_AWS_REGION,
-    credentials,
-}));
-
-const s3Client = new S3Client({
-    region: process.env.APP_AWS_REGION,
-    credentials,
-});
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -79,20 +64,20 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-    const { processedImageKey, bucket } = await request.json();
+    const { originalImageKey, bucket } = await request.json();
 
-    if (!processedImageKey || !bucket) {
+    if (!originalImageKey || !bucket) {
         return NextResponse.json({ error: 'Processed key and bucket are required' }, { status: 400 });
     }
 
     const command = new DeleteObjectCommand({
         Bucket: bucket,
-        Key: processedImageKey,
+        Key: originalImageKey,
     });
 
     try {
         await s3Client.send(command);
-        console.log(`Successfully deleted temporary file: ${processedImageKey}`);
+        console.log(`Successfully deleted temporary file: ${originalImageKey}`);
         return NextResponse.json({ message: 'Cleanup successful' });
     } catch (error) {
         console.error("DELETE Error:", error);
