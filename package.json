@@ -16,7 +16,7 @@
     "@aws-sdk/s3-request-presigner": "^3.828.0",
     "axios": "^1.10.0",
     "lucide-react": "^0.540.0",
-    "next": "15.3.3",
+    "next": "15.3.8",
     "next-auth": "^4.24.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
