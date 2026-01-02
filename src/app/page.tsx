@@ -7,8 +7,17 @@ import styles from './page.module.css';
 import axios, { AxiosProgressEvent } from 'axios';
 import RecentImagesCarousel, { RecentImage } from "./components/RecentImagesCarousel";
 
-type BoundingBox = { Width: number; Height: number; Left: number; Top: number; };
-type DetectedObject = { Label: string; Confidence: number; BoundingBox: BoundingBox; };
+type BoundingBox = {
+    Width: number;
+    Height: number;
+    Left: number;
+    Top: number;
+};
+type DetectedObject = {
+    Label: string;
+    Confidence: number;
+    BoundingBox: BoundingBox;
+};
 type DetectionResult = {
     imageId: string;
     s3_bucket: string;
@@ -16,6 +25,13 @@ type DetectionResult = {
     s3_original_key: string;
     detected_objects: DetectedObject[];
     processed_image_url: string;
+};
+type AnalyzeResult = {
+    w: number;
+    h: number;
+    mp: number;
+    recommendEnhance: boolean;
+    reason: string;
 };
 
 export default function Home() {
@@ -34,49 +50,70 @@ export default function Home() {
     const router = useRouter();
 
     useEffect(() => {
+        if (!results) return;
+        fetchThumbnails();
+    }, [results]);
+
+    useEffect(() => {
         if (status === "unauthenticated") {
             router.replace("/login");
+            return;
         }
+        if (status !== "authenticated") return;
 
-        fetch("/api/thumbnails?limit=20", { cache: "no-store" })
-            .then((r) => r.json())
-            .then((d) => setItems(d.items ?? []))
-            .catch(console.error);
-
-        if (results && canvasRef.current) {
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.src = results.processed_image_url;
-
-            img.onload = () => {
-                const fixedWidth = 800;
-                const aspectRatio = img.naturalHeight / img.naturalWidth;
-                canvas.width = fixedWidth;
-                canvas.height = fixedWidth * aspectRatio;
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-                ctx.strokeStyle = 'red';
-                ctx.lineWidth = 4;
-                ctx.font = '20px Arial';
-                ctx.fillStyle = 'red';
-                results.detected_objects.forEach(obj => {
-                    const { BoundingBox: bbox, Label, Confidence } = obj;
-                    const x = bbox.Left * canvas.width;
-                    const y = bbox.Top * canvas.height;
-                    const width = bbox.Width * canvas.width;
-                    const height = bbox.Height * canvas.height;
-                    ctx.strokeRect(x, y, width, height);
-                    const labelText = `${Label} (${Confidence.toFixed(2)}%)`;
-                    ctx.fillText(labelText, x, y > 20 ? y - 5 : 20);
-                });
-            };
-            img.onerror = () => setMessage("Error loading processed image from S3.");
+        if (items.length === 0) {
+            fetchThumbnails();
         }
-    }, [results, router, status]);
+    }, [status, router, items.length]);
+
+    useEffect(() => {
+        if (!results) return;
+        if (!canvasRef.current) return;
+
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.src = results.processed_image_url;
+
+        img.onload = () => {
+            const fixedWidth = 800;
+            const aspectRatio = img.naturalHeight / img.naturalWidth;
+            canvas.width = fixedWidth;
+            canvas.height = fixedWidth * aspectRatio;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 4;
+            ctx.font = "20px Arial";
+            ctx.fillStyle = "red";
+
+            results.detected_objects.forEach((obj) => {
+                const { BoundingBox: bbox, Label, Confidence } = obj;
+                const x = bbox.Left * canvas.width;
+                const y = bbox.Top * canvas.height;
+                const width = bbox.Width * canvas.width;
+                const height = bbox.Height * canvas.height;
+
+                ctx.strokeRect(x, y, width, height);
+
+                const labelText = `${Label} (${Confidence.toFixed(2)}%)`;
+                ctx.fillText(labelText, x, y > 20 ? y - 5 : 20);
+            });
+        };
+
+        img.onerror = () => setMessage("Error loading processed image from S3.");
+
+        return () => {
+            img.onload = null;
+            img.onerror = null;
+        };
+    }, [results]);
+
 
     const handleClear = () => {
         if (!results) return;
@@ -134,21 +171,79 @@ export default function Home() {
         setFile(selectedFile);
     };
 
+    async function analyzeImage(file: File): Promise<AnalyzeResult> {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+
+        const { w, h } = await new Promise<{ w: number; h: number }>((resolve, reject) => {
+            img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+            img.onerror = reject;
+            img.src = url;
+        });
+
+        URL.revokeObjectURL(url);
+
+        const mp = (w * h) / 1_000_000;
+        const minDim = Math.min(w, h);
+
+        const MAX_MEGAPIXELS = 2.0;
+        const MIN_DIM_SKIP = 1400;
+
+        if (mp >= MAX_MEGAPIXELS) {
+            return { w, h, mp, recommendEnhance: false, reason: "High resolution already" };
+        }
+        if (minDim >= MIN_DIM_SKIP) {
+            return { w, h, mp, recommendEnhance: false, reason: "Already large and detailed" };
+        }
+
+        return { w, h, mp, recommendEnhance: true, reason: "Enhancement may help" };
+    }
+
+    const fetchThumbnails = async () => {
+        try {
+            const r = await fetch("/api/thumbnails?limit=20", { cache: "no-store" });
+            const d = await r.json();
+            setItems(d.items ?? []);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (!file || validationError) return;
+
         setUploading(true);
         setUploadProgress(0);
-        setMessage('Uploading image...');
+        setMessage('Preparing upload...');
+
         try {
-            const route = isEnhanced ? '/api/s3/generate-enhance-url' : '/api/s3/generate-upload-url';
+            let effectiveEnhance = isEnhanced;
+
+            if (isEnhanced) {
+                const analysis = await analyzeImage(file);
+
+                if (!analysis.recommendEnhance) {
+                    effectiveEnhance = false;
+                    setMessage(`Your image is already clear enough (${analysis.reason}). We'll skip enhancement to avoid unnecessary processing.`);
+                }
+            }
+
+            const route = effectiveEnhance
+                ? '/api/s3/generate-enhance-url'
+                : '/api/s3/generate-upload-url';
+
             const presignedResponse = await fetch(route, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ filename: file.name, contentType: file.type }),
             });
+
             if (!presignedResponse.ok) throw new Error('Failed to get presigned URL.');
+
             const { url, fields, key } = await presignedResponse.json();
+
             const formData = new FormData();
             Object.entries(fields).forEach(([k, v]) => formData.append(k, v as string));
             formData.append('file', file);
@@ -162,20 +257,22 @@ export default function Home() {
                 }
             });
 
-            if (isEnhanced) {
-                setMessage('Upload successful. Processing image... this may take from 3 to 5 minutes ⏳');
+            if (effectiveEnhance) {
+                setMessage('Upload successful. Enhancing image... this may take 3 to 5 minutes.');
             } else {
                 setMessage('Upload successful. Processing image...');
             }
 
             setIsPolling(true);
             pollForResults(key);
+
         } catch (error) {
             handleError(error);
         } finally {
             setUploading(false);
         }
     };
+
 
     const pollForResults = (key: string) => {
         const adjustedKey = isEnhanced ? key.replace(/^analysis\//, 'enhanced/') : key;
@@ -219,27 +316,55 @@ export default function Home() {
         <main className={styles.main}>
             <div className={styles.description}>
                 <h1>Image Label and Bounding Box Generator</h1>
-                <p>Using AWS Rekognition, S3, Lambda, and DynamoDB</p>
+                <p>Event-driven image analysis using AWS Rekognition (S3, Lambda, DynamoDB)</p>
             </div>
 
             {!results ? (
-                <>
+                <div className={styles.stack}>
                     <form onSubmit={handleSubmit} className={styles.form}>
-                        <label htmlFor="file-input" className={styles.label}>Select an image:</label>
+                        <label htmlFor="file-input" className={styles.label}>Select an image</label>
+
                         <input
-                            id="file-input" type="file" accept="image/png, image/jpeg"
+                            id="file-input"
+                            type="file"
+                            accept="image/png, image/jpeg"
                             onChange={handleFileChange}
                             disabled={uploading || isPolling}
                         />
+
                         <button
                             type="submit"
                             className={styles.button}
                             disabled={!file || !!validationError || uploading || isPolling}
                         >
-                            {isPolling ? 'Processing...' : uploading ? 'Uploading...' : 'Analyze Image'}
+                            {isPolling ? "Processing..." : uploading ? "Uploading..." : "Analyze Image"}
                         </button>
-                        <input type="checkbox" id="enhance" checked={isEnhanced} onChange={handleEnhancedCheckboxChange} />
-                        <label htmlFor="enhance">Enhance image quality before analysis</label>
+
+                        <p className={styles.helperText}>
+                            Generates labels and bounding boxes. Results are cached for quick re-open.
+                        </p>
+
+                        <div className={styles.checkboxRow}>
+                            <input
+                                type="checkbox"
+                                id="enhance"
+                                checked={isEnhanced}
+                                onChange={handleEnhancedCheckboxChange}
+                                disabled={uploading || isPolling}
+                            />
+                            <label htmlFor="enhance">Enhance image quality before analysis</label>
+                        </div>
+
+                        {(uploading || isPolling) && (
+                            <div className={styles.statusRow} aria-live="polite">
+                                <span className={styles.spinner} />
+                                <span>
+                                    {uploading && !isPolling
+                                        ? `Uploading (${uploadProgress}%)`
+                                        : "Running analysis (this may take a few seconds)"}
+                                </span>
+                            </div>
+                        )}
                     </form>
 
                     {validationError && (
@@ -250,40 +375,50 @@ export default function Home() {
 
                     {uploading && !isPolling && (
                         <div className={styles.progressContainer}>
-                            <p>Uploading: {uploadProgress}%</p>
                             <progress className={styles.progressBar} value={uploadProgress} max="100" />
                         </div>
                     )}
-                    <div className={styles.thumbnailContainer}>
-                        <h2>Recently processed images</h2>
-                        <RecentImagesCarousel
-                            items={items}
-                            onSelect={async (it) => {
-                                console.log(it.processedKey);
-                                setIsThumbnail(true);
-                                const res = await fetch("/api/processed", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ key: it.processedKey }),
-                                });
-                                if (!res.ok) { return; }
-                                const { processedUrl, labels } = await res.json();
-                                setResults({
-                                    imageId: "",
-                                    s3_bucket: "",
-                                    s3_processed_key: it.processedKey,
-                                    s3_original_key: "",
-                                    detected_objects: labels,
-                                    processed_image_url: processedUrl,
-                                });
-                            }}
-                        />
-                    </div>
-                </>
+
+                    {!uploading && !isPolling && (
+                        <section className={styles.thumbnailSection}>
+                            <div className={styles.thumbnailHeader}>
+                                <h2>Or pick a recent image</h2>
+                                <p className={styles.thumbnailSubtext}>Open previous results without re-uploading.</p>
+                            </div>
+
+                            <div className={styles.thumbnailCard}>
+                                <RecentImagesCarousel
+                                    items={items}
+                                    onSelect={async (it) => {
+                                        setIsThumbnail(true);
+                                        const res = await fetch("/api/processed", {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({ key: it.processedKey }),
+                                        });
+                                        if (!res.ok) return;
+
+                                        const { processedUrl, labels } = await res.json();
+                                        setResults({
+                                            imageId: "",
+                                            s3_bucket: "",
+                                            s3_processed_key: it.processedKey,
+                                            s3_original_key: "",
+                                            detected_objects: labels,
+                                            processed_image_url: processedUrl,
+                                        });
+                                    }}
+                                />
+                            </div>
+                        </section>
+                    )}
+                </div>
             ) : (
                 <div className={styles.resultsContainer}>
                     <h2>Analysis Results</h2>
+
                     <canvas ref={canvasRef} className={styles.annotatedImage} />
+
                     <button onClick={handleClear} className={styles.clearButton}>
                         Analyze Another Image
                     </button>
@@ -293,4 +428,5 @@ export default function Home() {
             {message && <p className={styles.message}>{message}</p>}
         </main>
     );
+
 }

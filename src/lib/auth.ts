@@ -15,10 +15,14 @@ export const authOptions: NextAuthOptions = {
       if (profile?.["cognito:username"]) {
         token.username = profile["cognito:username"];
       }
+      if (profile?.sub) {
+        token.sub = profile.sub;
+      }
       return token;
     },
     async session({ session, token }) {
       session.user.username = token.username;
+      session.user.sub = token.sub as string | undefined;
       return session;
     },
   },

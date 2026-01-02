@@ -1,14 +1,11 @@
-// src/app/page.tsx
 "use client";
 
-// import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useState, ChangeEvent, FormEvent, useRef, useEffect } from 'react';
-import styles from './page.module.css';
-import axios, { AxiosProgressEvent } from 'axios';
+import { useState, ChangeEvent, FormEvent, useRef, useEffect } from "react";
+import styles from "./page.module.css";
+import axios, { AxiosProgressEvent } from "axios";
 
-type BoundingBox = { Width: number; Height: number; Left: number; Top: number; };
-type DetectedObject = { Label: string; Confidence: number; BoundingBox: BoundingBox; };
+type BoundingBox = { Width: number; Height: number; Left: number; Top: number };
+type DetectedObject = { Label: string; Confidence: number; BoundingBox: BoundingBox };
 type DetectionResult = {
     imageId: string;
     s3_bucket: string;
@@ -21,95 +18,109 @@ export default function Home() {
     const [file, setFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
-    const [message, setMessage] = useState('');
+    const [message, setMessage] = useState("");
     const [results, setResults] = useState<DetectionResult | null>(null);
     const [isPolling, setIsPolling] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
+
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    // const { status } = useSession();
-    const router = useRouter();
+    const pollingRef = useRef<{ intervalId: number | null; timeoutId: number | null }>({
+        intervalId: null,
+        timeoutId: null,
+    });
+
+    const MAX_SIZE_MB = 10;
+    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+    const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/jpg"];
 
     useEffect(() => {
-        // if (status === "unauthenticated") {
-        //     router.replace("/login");
-        // }
+        if (!results || !canvasRef.current) return;
 
-        if (results && canvasRef.current) {
-            const canvas = canvasRef.current;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
 
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.src = results.processed_image_url;
+        const img = new Image();
+        img.crossOrigin = "Anonymous";
+        img.src = results.processed_image_url;
 
-            img.onload = () => {
-                const fixedWidth = 800;
-                const aspectRatio = img.naturalHeight / img.naturalWidth;
-                canvas.width = fixedWidth;
-                canvas.height = fixedWidth * aspectRatio;
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        img.onload = () => {
+            const fixedWidth = 800;
+            const aspectRatio = img.naturalHeight / img.naturalWidth;
 
-                ctx.strokeStyle = 'red';
-                ctx.lineWidth = 4;
-                ctx.font = '20px Arial';
-                ctx.fillStyle = 'red';
-                results.detected_objects.forEach(obj => {
-                    const { BoundingBox: bbox, Label, Confidence } = obj;
-                    const x = bbox.Left * canvas.width;
-                    const y = bbox.Top * canvas.height;
-                    const width = bbox.Width * canvas.width;
-                    const height = bbox.Height * canvas.height;
-                    ctx.strokeRect(x, y, width, height);
-                    const labelText = `${Label} (${Confidence.toFixed(2)}%)`;
-                    ctx.fillText(labelText, x, y > 20 ? y - 5 : 20);
-                });
-            };
-            img.onerror = () => setMessage("Error loading processed image from S3.");
+            canvas.width = fixedWidth;
+            canvas.height = Math.round(fixedWidth * aspectRatio);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 4;
+            ctx.font = "18px Segoe UI";
+            ctx.fillStyle = "red";
+
+            for (const obj of results.detected_objects) {
+                const { BoundingBox: bbox, Label, Confidence } = obj;
+                const x = bbox.Left * canvas.width;
+                const y = bbox.Top * canvas.height;
+                const width = bbox.Width * canvas.width;
+                const height = bbox.Height * canvas.height;
+
+                ctx.strokeRect(x, y, width, height);
+
+                const labelText = `${Label} (${Confidence.toFixed(2)}%)`;
+                ctx.fillText(labelText, x, y > 22 ? y - 6 : 22);
+            }
+        };
+
+        img.onerror = () => setMessage("Error loading processed image.");
+
+        return () => {
+            img.onload = null;
+            img.onerror = null;
+        };
+    }, [results]);
+
+    useEffect(() => {
+        return () => stopPolling();
+    }, []);
+
+    const stopPolling = () => {
+        if (pollingRef.current.intervalId) {
+            clearInterval(pollingRef.current.intervalId);
+            pollingRef.current.intervalId = null;
         }
-    }, [results, router]);
+        if (pollingRef.current.timeoutId) {
+            clearTimeout(pollingRef.current.timeoutId);
+            pollingRef.current.timeoutId = null;
+        }
+    };
 
     const handleClear = () => {
-        if (!results) return;
-
-        console.log("Clearing results and triggering cleanup...");
-
-        fetch(`/api/results`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                processedImageKey: results.s3_processed_key,
-                bucket: results.s3_bucket,
-            })
-        })
-            .then(res => res.json())
-            .then(data => console.log("Cleanup response:", data))
-            .catch(err => console.error("Cleanup failed:", err));
-
+        stopPolling();
         setResults(null);
         setFile(null);
-        setMessage('');
+        setMessage("");
         setUploadProgress(0);
+        setValidationError(null);
+        setUploading(false);
+        setIsPolling(false);
     };
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-        setMessage('');
+        setMessage("");
         setUploadProgress(0);
 
-        const selectedFile = e.target.files?.[0] ? e.target.files[0] : null;
+        const selectedFile = e.target.files?.[0] ?? null;
 
         if (!selectedFile) {
             setFile(null);
-            setValidationError('No file selected.');
+            setValidationError("No file selected.");
             return;
         }
 
-        const MAX_SIZE_MB = 10;
-        const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
-        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/jpg'];
-
         if (!ALLOWED_TYPES.includes(selectedFile.type)) {
-            setValidationError('Invalid file type. Please upload a JPG or PNG.');
+            setValidationError("Invalid file type. Please upload a JPG or PNG.");
         } else if (selectedFile.size > MAX_SIZE_BYTES) {
             setValidationError(`File size exceeds ${MAX_SIZE_MB} MB limit.`);
         } else {
@@ -119,23 +130,56 @@ export default function Home() {
         setFile(selectedFile);
     };
 
+    const pollForResults = (key: string) => {
+        stopPolling();
+        setIsPolling(true);
+
+        const encodedKey = encodeURIComponent(key);
+
+        pollingRef.current.intervalId = window.setInterval(async () => {
+            try {
+                const resultResponse = await fetch(`/api/results?id=${encodedKey}`, { cache: "no-store" });
+                if (!resultResponse.ok) return;
+
+                const data: DetectionResult = await resultResponse.json();
+                setResults(data);
+                setMessage("Analysis complete.");
+                setIsPolling(false);
+                stopPolling();
+            } catch (error) {
+                console.error("Polling error:", error);
+            }
+        }, 3000);
+
+        pollingRef.current.timeoutId = window.setTimeout(() => {
+            stopPolling();
+            setIsPolling(false);
+            setMessage("Processing timed out. Please try again.");
+        }, 120000);
+    };
+
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         if (!file || validationError) return;
+
         setUploading(true);
         setUploadProgress(0);
-        setMessage('Uploading image...');
+        setMessage("Uploading image...");
+
         try {
-            const presignedResponse = await fetch('/api/s3/generate-upload-url', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+            const presignedResponse = await fetch("/api/s3/generate-upload-url", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ filename: file.name, contentType: file.type }),
             });
-            if (!presignedResponse.ok) throw new Error('Failed to get presigned URL.');
+
+            if (!presignedResponse.ok) throw new Error("Failed to get presigned URL.");
+
             const { url, fields, key } = await presignedResponse.json();
+
             const formData = new FormData();
             Object.entries(fields).forEach(([k, v]) => formData.append(k, v as string));
-            formData.append('file', file);
+            formData.append("file", file);
 
             await axios.post(url, formData, {
                 onUploadProgress: (progressEvent: AxiosProgressEvent) => {
@@ -143,94 +187,77 @@ export default function Home() {
                         const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
                         setUploadProgress(percent);
                     }
-                }
+                },
             });
 
-            setMessage('Upload successful. Processing image...');
-            setIsPolling(true);
+            setMessage("Upload complete. Running analysis...");
             pollForResults(key);
         } catch (error) {
-            handleError(error);
+            const msg = error instanceof Error ? error.message : "Unknown error";
+            setMessage(`An error occurred: ${msg}`);
+            stopPolling();
+            setIsPolling(false);
         } finally {
             setUploading(false);
         }
     };
 
-    const pollForResults = (key: string) => {
-        const encodedKey = encodeURIComponent(key);
-        const intervalId = setInterval(async () => {
-            try {
-                const resultResponse = await fetch(`/api/results?id=${encodedKey}`);
-                if (resultResponse.ok) {
-                    const data: DetectionResult = await resultResponse.json();
-                    setResults(data);
-                    setMessage('Analysis complete!');
-                    setIsPolling(false);
-                    clearInterval(intervalId);
-                }
-            } catch (error) { console.error('Polling error:', error); }
-        }, 3000);
-        setTimeout(() => {
-            if (isPolling) {
-                clearInterval(intervalId);
-                setIsPolling(false);
-                setMessage('Processing timed out.');
-            }
-        }, 120000);
-    };
-
-    const handleError = (error: unknown) => {
-        setMessage(`An error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        setUploading(false);
-        setIsPolling(false);
-    };
+    const busy = uploading || isPolling;
 
     return (
         <main className={styles.main}>
-            <div className={styles.description}>
+            <header className={styles.description}>
                 <h1>Image Label and Bounding Box Generator</h1>
-                <p>Using AWS Rekognition, S3, Lambda, and DynamoDB</p>
-            </div>
+                <p>Minimal demo: upload an image and receive labels + bounding boxes.</p>
+            </header>
 
             {!results ? (
-                <>
+                <section className={styles.stack}>
                     <form onSubmit={handleSubmit} className={styles.form}>
-                        <label htmlFor="file-input" className={styles.label}>Select an image:</label>
+                        <label htmlFor="file-input" className={styles.label}>
+                            Select an image (JPG/PNG, up to {MAX_SIZE_MB}MB)
+                        </label>
+
                         <input
-                            id="file-input" type="file" accept="image/png, image/jpeg"
+                            id="file-input"
+                            type="file"
+                            accept="image/png, image/jpeg"
                             onChange={handleFileChange}
-                            disabled={uploading || isPolling}
+                            disabled={busy}
                         />
+
                         <button
                             type="submit"
                             className={styles.button}
-                            disabled={!file || !!validationError || uploading || isPolling}
+                            disabled={!file || !!validationError || busy}
                         >
-                            {isPolling ? 'Processing...' : uploading ? 'Uploading...' : 'Analyze Image'}
+                            {isPolling ? "Processing..." : uploading ? "Uploading..." : "Analyze Image"}
                         </button>
+
+                        {busy && (
+                            <div className={styles.statusRow} aria-live="polite">
+                                <span className={styles.spinner} />
+                                <span>{uploading && !isPolling ? `Uploading (${uploadProgress}%)` : "Analyzing image..."}</span>
+                            </div>
+                        )}
                     </form>
 
-                    {validationError && (
-                        <p className={styles.errorMessage}>
-                            {validationError}
-                        </p>
-                    )}
+                    {validationError && <p className={styles.errorMessage}>{validationError}</p>}
 
                     {uploading && !isPolling && (
                         <div className={styles.progressContainer}>
-                            <p>Uploading: {uploadProgress}%</p>
                             <progress className={styles.progressBar} value={uploadProgress} max="100" />
                         </div>
                     )}
-                </>
+                </section>
             ) : (
-                <div className={styles.resultsContainer}>
+                <section className={styles.resultsContainer}>
                     <h2>Analysis Results</h2>
                     <canvas ref={canvasRef} className={styles.annotatedImage} />
                     <button onClick={handleClear} className={styles.clearButton}>
                         Analyze Another Image
                     </button>
-                </div>
+                </section>
             )}
 
             {message && <p className={styles.message}>{message}</p>}

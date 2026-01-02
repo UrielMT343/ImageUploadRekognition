@@ -1,3 +1,4 @@
+# S3 Bucket
 resource "aws_s3_bucket" "image_bucket" {
   bucket = var.s3_bucket_name
 
@@ -8,6 +9,7 @@ resource "aws_s3_bucket" "image_bucket" {
   }
 }
 
+# DynamoDB table
 resource "aws_dynamodb_table" "results_table" {
   name         = var.dynamodb_table_name
   billing_mode = "PAY_PER_REQUEST"
@@ -25,6 +27,7 @@ resource "aws_dynamodb_table" "results_table" {
   }
 }
 
+# Lambda execution role
 resource "aws_iam_role" "lambda_exec_role" {
   name = "RekognitionLambdaRole"
 
@@ -47,25 +50,22 @@ resource "aws_iam_role" "lambda_exec_role" {
   }
 }
 
-# Attach the basic AWS-managed policy for Lambda logging
 resource "aws_iam_role_policy_attachment" "name" {
   role       = aws_iam_role.lambda_exec_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Look up the existing Pillow Lambda Layer
 data "aws_lambda_layer_version" "pillow_layer" {
   layer_name = "Pillow_Layer"
 }
 
-# Package the Lambda function code into a zip file
+# Set the lambda from the file
 data "archive_file" "lambda_zip" {
   type        = "zip"
-  source_file = "../src/app/api/lambda_function.py" # IMPORTANT: Update this path to your actual lambda python file!
+  source_file = "../src/app/api/lambda_function.py"
   output_path = "lambda_function.zip"
 }
 
-#Create the Lambda function
 resource "aws_lambda_function" "rekognition_lambda" {
   function_name = var.lambda_function_name
   role          = aws_iam_role.lambda_exec_role.arn
@@ -75,9 +75,9 @@ resource "aws_lambda_function" "rekognition_lambda" {
 
   handler = "lambda_function.lambda_handler"
   runtime = "python3.13"
-
-  memory_size = 1024 # Increase memory from 128MB to 1024MB (1GB). This will also increase CPU power.
-  timeout     = 30   # Increase timeout to 30 seconds
+  
+  memory_size = 1024
+  timeout     = 30
 
   environment {
     variables = {
@@ -100,7 +100,6 @@ resource "aws_iam_policy" "lambda_permissions" {
   name        = "RekognitionLambdaPermissionsPolicy"
   description = "Permissions for the Rekognition Lambda to access S3, DynamoDB, and Rekognition"
 
-  # The policy document itself
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -111,7 +110,7 @@ resource "aws_iam_policy" "lambda_permissions" {
           "s3:DeleteObject"
         ],
         Effect   = "Allow",
-        Resource = "${aws_s3_bucket.image_bucket.arn}/*" # Grant get, put, and delete permissions
+        Resource = "${aws_s3_bucket.image_bucket.arn}/*"
       },
       {
         Action   = "dynamodb:PutItem",
@@ -149,32 +148,10 @@ resource "aws_s3_bucket_notification" "image_upload_notification" {
   lambda_function {
     lambda_function_arn = aws_lambda_function.rekognition_lambda.arn
     events              = ["s3:ObjectCreated:*"]
-    filter_prefix       = "uploads/" # Optional: Only trigger for objects in the 'uploads/' prefix
+    filter_prefix       = "uploads/"
   }
 
   depends_on = [aws_lambda_permission.allow_s3]
-}
-
-# Create ECR public repository for the Docker image for Go backend
-resource "aws_ecrpublic_repository" "go_backend_repo" {
-  repository_name = "go-backend-repo"
-
-  tags = {
-    Name      = "Go Backend Repository"
-    Project   = "Image-Upload-Rekognition"
-    ManagedBy = "Terraform"
-  }
-}
-
-#  Create ECR puublic repository for the ESRGAN Docker image
-resource "aws_ecrpublic_repository" "ESRGAN_repo" {
-  repository_name = "esrgan-repo"
-
-  tags = {
-    Name      = "ESRGAN Repository"
-    Project   = "Image-Upload-Rekognition"
-    ManagedBy = "Terraform"
-  }
 }
 
 #Cognito User Pool for user authentication
@@ -209,8 +186,7 @@ resource "aws_cognito_user_pool_client" "ImageLabelGeneratorClient" {
 }
 
 #Create a Cognito User Pool Domain
-# This is used for the hosted UI for user authentication
 resource "aws_cognito_user_pool_domain" "image-label-generator" {
-  domain = "image-label-generator"
+  domain       = "image-label-generator"
   user_pool_id = aws_cognito_user_pool.ImageLabelGenerator.id
 }
