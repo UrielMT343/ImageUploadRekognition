@@ -1,36 +1,126 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Image Label Generator
 
-## Getting Started
+An event-driven image processing platform that allows users to upload images, optionally enhance them, and automatically generate labels and bounding boxes using AWS Rekognition. The system is designed with scalability, security, and cost-efficiency in mind, leveraging serverless and container-based workloads.
 
-First, run the development server:
+## Fetaures
+- Secure direct image uploads to S3 using presigned POST URLs
+- Asynchronous image processing via event-driven architecture
+- Optional image enhancement using ECS Fargate for compute-heavy workloads
+- Automated label and bounding box detection using AWS Rekognition
+- User authentication via Amazon Cognito and NextAuth
+- Per-user and global rate limiting to prevent abuse
+- Fully reproducible infrastructure using Terraform (IaC)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Architecture overview
+<img width="885" height="753" alt="image" src="https://github.com/user-attachments/assets/b3a194ec-40ee-4171-b865-a46c7a876913" />
+
+1. **Frontend (Next.js on Vercel)**
+  - Authenticated users request a presigned upload URL
+  - Images are uploaded directly to S3 (no backend proxy)
+
+2. **Upload & Processing**
+  - S3 ObjectCreated events trigger downstream processing
+  - Optional enhancement path:
+    - Lambda triggers an on-demand ECS Fargate task
+    - Enhanced image is written back to S3
+
+3. **Analysis**
+  - S3 events enqueue messages to SQS
+  - Rekognition Lambda consumes messages, runs label detection
+  - Results are stored in DynamoDB and accessible via API
+
+4. **Security & Control**
+  - IAM roles are scoped by responsibility (Lambda, ECS execution, ECS task)
+  - Rate limiting enforced via Vercel WAF and per-user server-side limits
+
+## Tech Stack
+### Frontend
+- Next.Js (App Router)
+- NextAuth
+- Deployed on Vercel
+
+### Backend / Cloud
+- AWS S3 (storage, event source)
+- AWS Lambda (orchestration, analysis)
+- AWS Rekognition (image labeling)
+- AWS SQS (decoupling and buffering)
+- AWS ECS Fargate (image enhancement workloads)
+- AWS DynamoDB (results storage)
+- Amazon Cognito (authentication)
+
+### Infrastructure
+- Terraform (Infrastructure as Code)
+
+## Getting started
+### Prerequisites
+
+- AWS account
+- Terraform ≥ 1.6
+- Node.js ≥ 18
+- Vercel account (for frontend deployment)
+
+### Terraform Setup
+```
+cd terraform
+terraform init
+terraform apply
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+After apply, Terraform will output values such as:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- S3 bucket name
+- DynamoDB table name
+- Cognito User Pool ID and Client ID
+- Cognito Issuer URL
+- Lambda and ECS resource identifiers
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+*These outputs are required for application configuration.*
 
-## Learn More
+## Enviroment variables
 
-To learn more about Next.js, take a look at the following resources:
+### Frontend (Vercel/.env.local)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+NEXTAUTH_URL=https://your-app.vercel.app
+NEXTAUTH_SECRET=your-secret
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+COGNITO_CLIENT_ID=from_terraform_output
+COGNITO_CLIENT_SECRET=from_cognito
+COGNITO_ISSUER=from_terraform_output
 
-## Deploy on Vercel
+AWS_REGION=us-east-1
+DYNAMODB_TABLE_NAME=your-daynamo-table
+S3_BUCKET_NAME=your-s3-bucket
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Frontend (Vercel/.env.local)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+pnpm install
+pnpm run dev
+```
+
+*The app will be available at http://localhost:3000.*
+
+### Security Considerations
+
+- Large file uploads are never proxied through the backend.
+- IAM roles follow the principle of least privilege.
+- Authentication and authorization handled by Cognito.
+- Abuse prevention via:
+  - Vercel WAF rate limiting.
+  - Per-user server-side throttling.
+
+### CI / CD
+
+- GitHub Actions for linting, type checking, and build validation
+- Path-based CI execution to avoid unnecessary builds.
+- Vercel Git integration for preview and production deployments.
+- Ignored Build Step configured to deploy only when relevant source files change.
+- PR checks for both go backend and esrgan images.
+- Automatic build and push for changes of the ECR images.
+
+### Notes
+- ECS tasks are launched on-demand to minimize cost
+- The system is designed to be easily extended (additional processors, new pipelines)
+- All infrastructure is fully reproducible via Terraform
