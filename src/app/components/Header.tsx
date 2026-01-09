@@ -22,7 +22,7 @@ export default function Header() {
       </div>
 
       <div className={styles.userSection}>
-        {isDemoRoute && session?.user && (
+        {isDemoRoute && (
           <button
             className={styles.ctaButton}
             onClick={() => router.push("/login")}

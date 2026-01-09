@@ -167,7 +167,7 @@ export default function Home() {
         setMessage("Uploading image...");
 
         try {
-            const presignedResponse = await fetch("/api/s3/generate-upload-url", {
+            const presignedResponse = await fetch("/api/s3/generate-demo-upload-url", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ filename: file.name, contentType: file.type }),
