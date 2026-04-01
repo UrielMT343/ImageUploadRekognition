@@ -30,7 +30,7 @@ importers:
         specifier: ^1.36.0
         version: 1.36.0
       axios:
-        specifier: ^1.10.0
+        specifier: 1.13.2
         version: 1.13.2
       lucide-react:
         specifier: ^0.540.0
